@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit, Trash2, Save, X, MapPin, Calendar, Star, DollarSign, Tag, Search, Filter, Globe, Target } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Plus, Edit, Trash2, Save, X, MapPin, Calendar, Star, DollarSign, Tag, Search, Filter, Globe, Target, Download, Upload } from 'lucide-react';
 
 const TravelLogApp = () => {
   const [entries, setEntries] = useState([]);
@@ -18,6 +18,7 @@ const TravelLogApp = () => {
     tags: '',
     expenses: 0
   });
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     const savedEntries = localStorage.getItem('travelEntries');
@@ -130,6 +131,69 @@ const TravelLogApp = () => {
     }
   };
 
+  const handleExport = () => {
+    const dataStr = JSON.stringify(entries, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `travel-entries-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const importedData = JSON.parse(e.target.result);
+        
+        if (!Array.isArray(importedData)) {
+          alert('Invalid file format. Please select a valid travel entries JSON file.');
+          return;
+        }
+
+        const validEntries = importedData.filter(entry => {
+          return entry && 
+                 typeof entry === 'object' && 
+                 entry.title && 
+                 entry.country && 
+                 entry.city && 
+                 entry.date;
+        });
+
+        if (validEntries.length === 0) {
+          alert('No valid travel entries found in the file.');
+          return;
+        }
+
+        const processedEntries = validEntries.map(entry => ({
+          ...entry,
+          id: entry.id || Date.now() + Math.random(),
+          tags: Array.isArray(entry.tags) ? entry.tags : [],
+          rating: Number(entry.rating) || 1,
+          expenses: Number(entry.expenses) || 0
+        }));
+
+        if (window.confirm(`Import ${processedEntries.length} travel entries? This will add to your existing entries.`)) {
+          setEntries(prev => [...prev, ...processedEntries]);
+        }
+      } catch (error) {
+        alert('Error reading file. Please ensure it\'s a valid JSON file.');
+      }
+    };
+    reader.readAsText(file);
+    
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const renderStars = (rating) => {
     return Array.from({ length: 5 }, (_, i) => (
       <Star
@@ -151,13 +215,32 @@ const TravelLogApp = () => {
               <Globe className="w-8 h-8 text-blue-600" />
               <h1 className="text-3xl font-bold text-gray-900">PoliWorld Travel Log</h1>
             </div>
-            <button 
-              onClick={() => setIsFormOpen(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium flex items-center space-x-2 transition-colors duration-200 shadow-md hover:shadow-lg"
-            >
-              <Plus size={20} />
-              <span>Add New Entry</span>
-            </button>
+            <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2">
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg font-medium flex items-center space-x-2 transition-colors duration-200 shadow-md hover:shadow-lg"
+                >
+                  <Upload size={18} />
+                  <span>Import</span>
+                </button>
+                <button 
+                  onClick={handleExport}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-3 rounded-lg font-medium flex items-center space-x-2 transition-colors duration-200 shadow-md hover:shadow-lg"
+                  disabled={entries.length === 0}
+                >
+                  <Download size={18} />
+                  <span>Export</span>
+                </button>
+              </div>
+              <button 
+                onClick={() => setIsFormOpen(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium flex items-center space-x-2 transition-colors duration-200 shadow-md hover:shadow-lg"
+              >
+                <Plus size={20} />
+                <span>Add New Entry</span>
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -511,6 +594,15 @@ const TravelLogApp = () => {
             ))}
           </div>
         )}
+        
+        {/* Hidden file input for import */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleImport}
+          accept=".json"
+          style={{ display: 'none' }}
+        />
       </div>
     </div>
   );
