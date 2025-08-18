@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Edit, Trash2, Save, X, MapPin, Calendar, Star, DollarSign, Tag, Search, Filter, Globe, Target, Download, Upload, Camera, Image as ImageIcon } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, MapPin, Calendar, Star, DollarSign, Tag, Search, Filter, Globe, Target, Download, Upload, Camera, Image as ImageIcon, Map } from 'lucide-react';
+import TravelMap from './TravelMap';
 
 const TravelLogApp = () => {
   const [entries, setEntries] = useState([]);
@@ -8,6 +9,7 @@ const TravelLogApp = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRating, setFilterRating] = useState(0);
   const [filterCountry, setFilterCountry] = useState('');
+  const [currentView, setCurrentView] = useState('grid'); // 'grid' or 'map'
   const [formData, setFormData] = useState({
     date: '',
     country: '',
@@ -381,8 +383,39 @@ const TravelLogApp = () => {
           </div>
         </div>
 
-        {/* Search and Filter */}
+        {/* View Toggle and Search/Filter */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8 border border-gray-100">
+          <div className="flex justify-between items-center mb-6">
+            <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setCurrentView('grid')}
+                className={`px-4 py-2 rounded-md font-medium transition-colors flex items-center space-x-2 ${
+                  currentView === 'grid'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Target size={16} />
+                <span>Grid View</span>
+              </button>
+              <button
+                onClick={() => setCurrentView('map')}
+                className={`px-4 py-2 rounded-md font-medium transition-colors flex items-center space-x-2 ${
+                  currentView === 'map'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Map size={16} />
+                <span>Map View</span>
+              </button>
+            </div>
+            
+            <div className="text-sm text-gray-500">
+              {filteredEntries.length} of {entries.length} entries
+            </div>
+          </div>
+          
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -642,23 +675,34 @@ const TravelLogApp = () => {
           </div>
         )}
 
-        {/* Entries Grid */}
-        {filteredEntries.length === 0 ? (
-          <div className="text-center py-16">
-            <Globe className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              {entries.length === 0 ? 'No travel entries yet!' : 'No entries match your filters'}
-            </h3>
-            <p className="text-gray-600">
-              {entries.length === 0 
-                ? 'Start documenting your adventures by adding your first entry.' 
-                : 'Try adjusting your search or filter criteria.'}
-            </p>
+        {/* Content Area - Grid or Map */}
+        {currentView === 'map' ? (
+          <div className="h-[600px] mb-8">
+            <TravelMap 
+              entries={filteredEntries}
+              onMarkerClick={(entry) => {
+                // Optional: Could open entry details or highlight it
+                console.log('Clicked marker for:', entry.title);
+              }}
+            />
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredEntries.map(entry => (
-              <div key={entry.id} className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden group hover:-translate-y-1">
+          filteredEntries.length === 0 ? (
+            <div className="text-center py-16">
+              <Globe className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                {entries.length === 0 ? 'No travel entries yet!' : 'No entries match your filters'}
+              </h3>
+              <p className="text-gray-600">
+                {entries.length === 0 
+                  ? 'Start documenting your adventures by adding your first entry.' 
+                  : 'Try adjusting your search or filter criteria.'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredEntries.map(entry => (
+                <div key={entry.id} className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden group hover:-translate-y-1">
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center text-gray-600">
@@ -746,8 +790,9 @@ const TravelLogApp = () => {
                   )}
                 </div>
               </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )
         )}
         
         {/* Hidden file inputs */}
