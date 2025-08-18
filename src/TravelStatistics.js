@@ -1,0 +1,352 @@
+import React, { useMemo } from 'react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  AreaChart,
+  Area
+} from 'recharts';
+import { Calendar, DollarSign, MapPin, Star, TrendingUp } from 'lucide-react';
+
+const TravelStatistics = ({ entries }) => {
+  // Color palette for charts
+  const colors = {
+    primary: '#3B82F6',
+    secondary: '#10B981',
+    accent: '#F59E0B',
+    purple: '#8B5CF6',
+    rose: '#F43F5E',
+    teal: '#14B8A6'
+  };
+
+  const chartColors = [colors.primary, colors.secondary, colors.accent, colors.purple, colors.rose, colors.teal];
+
+  // Calculate spending over time
+  const spendingOverTime = useMemo(() => {
+    if (entries.length === 0) return [];
+
+    const monthlyData = {};
+    
+    entries.forEach(entry => {
+      const date = new Date(entry.date);
+      const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (!monthlyData[monthYear]) {
+        monthlyData[monthYear] = {
+          month: monthYear,
+          monthName: date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' }),
+          spending: 0,
+          trips: 0
+        };
+      }
+      
+      monthlyData[monthYear].spending += entry.expenses || 0;
+      monthlyData[monthYear].trips += 1;
+    });
+
+    return Object.values(monthlyData).sort((a, b) => a.month.localeCompare(b.month));
+  }, [entries]);
+
+  // Calculate countries visited distribution
+  const countriesData = useMemo(() => {
+    if (entries.length === 0) return [];
+
+    const countryCount = {};
+    entries.forEach(entry => {
+      countryCount[entry.country] = (countryCount[entry.country] || 0) + 1;
+    });
+
+    return Object.entries(countryCount)
+      .map(([country, count]) => ({ country, trips: count }))
+      .sort((a, b) => b.trips - a.trips)
+      .slice(0, 10); // Top 10 countries
+  }, [entries]);
+
+  // Calculate rating distribution
+  const ratingsData = useMemo(() => {
+    if (entries.length === 0) return [];
+
+    const ratingCount = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    entries.forEach(entry => {
+      ratingCount[entry.rating] = (ratingCount[entry.rating] || 0) + 1;
+    });
+
+    return Object.entries(ratingCount).map(([rating, count]) => ({
+      rating: `${rating} Star${rating > 1 ? 's' : ''}`,
+      count,
+      percentage: ((count / entries.length) * 100).toFixed(1)
+    }));
+  }, [entries]);
+
+  // Calculate trips by year
+  const tripsByYear = useMemo(() => {
+    if (entries.length === 0) return [];
+
+    const yearData = {};
+    entries.forEach(entry => {
+      const year = new Date(entry.date).getFullYear();
+      if (!yearData[year]) {
+        yearData[year] = { year, trips: 0, spending: 0, avgRating: 0, totalRating: 0 };
+      }
+      yearData[year].trips += 1;
+      yearData[year].spending += entry.expenses || 0;
+      yearData[year].totalRating += entry.rating;
+    });
+
+    return Object.values(yearData)
+      .map(data => ({
+        ...data,
+        avgRating: Number((data.totalRating / data.trips).toFixed(1))
+      }))
+      .sort((a, b) => a.year - b.year);
+  }, [entries]);
+
+  // Calculate key metrics
+  const metrics = useMemo(() => {
+    if (entries.length === 0) return { totalSpending: 0, avgTripCost: 0, totalCountries: 0, avgRating: 0 };
+
+    const totalSpending = entries.reduce((sum, entry) => sum + (entry.expenses || 0), 0);
+    const totalCountries = new Set(entries.map(entry => entry.country)).size;
+    const avgRating = entries.reduce((sum, entry) => sum + entry.rating, 0) / entries.length;
+    const avgTripCost = totalSpending / entries.length;
+
+    return {
+      totalSpending,
+      avgTripCost,
+      totalCountries,
+      avgRating: Number(avgRating.toFixed(1))
+    };
+  }, [entries]);
+
+  if (entries.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+        <div className="text-center">
+          <div className="text-gray-400 mb-2">📊</div>
+          <p className="text-gray-500 font-medium">No data to visualize</p>
+          <p className="text-gray-400 text-sm">Add some travel entries to see statistics!</p>
+        </div>
+      </div>
+    );
+  }
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
+          <p className="font-medium text-gray-900">{label}</p>
+          {payload.map((entry, index) => (
+            <p key={index} style={{ color: entry.color }} className="text-sm">
+              {entry.name}: {entry.name.includes('$') || entry.name.includes('Spending') ? `$${entry.value.toFixed(2)}` : entry.value}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Key Metrics Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-lg shadow-md border border-gray-100">
+          <div className="flex items-center">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <DollarSign className="w-5 h-5 text-blue-600" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-600">Total Spent</p>
+              <p className="text-lg font-bold text-gray-900">${metrics.totalSpending.toFixed(2)}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-lg shadow-md border border-gray-100">
+          <div className="flex items-center">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <TrendingUp className="w-5 h-5 text-green-600" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-600">Avg Trip Cost</p>
+              <p className="text-lg font-bold text-gray-900">${metrics.avgTripCost.toFixed(2)}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-lg shadow-md border border-gray-100">
+          <div className="flex items-center">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <MapPin className="w-5 h-5 text-purple-600" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-600">Countries</p>
+              <p className="text-lg font-bold text-gray-900">{metrics.totalCountries}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-lg shadow-md border border-gray-100">
+          <div className="flex items-center">
+            <div className="p-2 bg-yellow-100 rounded-lg">
+              <Star className="w-5 h-5 text-yellow-600" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-600">Avg Rating</p>
+              <p className="text-lg font-bold text-gray-900">{metrics.avgRating}/5</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Charts Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        {/* Spending Over Time */}
+        <div className="bg-white p-6 rounded-lg shadow-md border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <Calendar className="w-5 h-5 mr-2 text-blue-600" />
+            Spending Over Time
+          </h3>
+          <div style={{ width: '100%', height: 300 }}>
+            <ResponsiveContainer>
+              <AreaChart data={spendingOverTime}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="monthName" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} tickFormatter={(value) => `$${value}`} />
+                <Tooltip content={<CustomTooltip />} />
+                <Area
+                  type="monotone"
+                  dataKey="spending"
+                  stroke={colors.primary}
+                  fill={colors.primary}
+                  fillOpacity={0.3}
+                  strokeWidth={2}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Top Countries Visited */}
+        <div className="bg-white p-6 rounded-lg shadow-md border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <MapPin className="w-5 h-5 mr-2 text-green-600" />
+            Most Visited Countries
+          </h3>
+          <div style={{ width: '100%', height: 300 }}>
+            <ResponsiveContainer>
+              <BarChart data={countriesData} layout="horizontal">
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis type="number" tick={{ fontSize: 12 }} />
+                <YAxis type="category" dataKey="country" tick={{ fontSize: 12 }} width={80} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="trips" fill={colors.secondary} radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Rating Distribution */}
+        <div className="bg-white p-6 rounded-lg shadow-md border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <Star className="w-5 h-5 mr-2 text-yellow-600" />
+            Rating Distribution
+          </h3>
+          <div style={{ width: '100%', height: 300 }}>
+            <ResponsiveContainer>
+              <PieChart>
+                <Pie
+                  data={ratingsData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ rating, percentage }) => `${rating} (${percentage}%)`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="count"
+                >
+                  {ratingsData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Trips by Year */}
+        <div className="bg-white p-6 rounded-lg shadow-md border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <TrendingUp className="w-5 h-5 mr-2 text-purple-600" />
+            Travel Activity by Year
+          </h3>
+          <div style={{ width: '100%', height: 300 }}>
+            <ResponsiveContainer>
+              <LineChart data={tripsByYear}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="year" tick={{ fontSize: 12 }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 12 }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend />
+                <Bar yAxisId="left" dataKey="trips" fill={colors.accent} name="Number of Trips" />
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="avgRating"
+                  stroke={colors.rose}
+                  strokeWidth={3}
+                  dot={{ fill: colors.rose, strokeWidth: 2, r: 4 }}
+                  name="Average Rating"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Additional Insights */}
+      {spendingOverTime.length > 1 && (
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-lg border border-blue-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">📈 Travel Insights</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div className="bg-white/50 p-3 rounded-lg">
+              <p className="font-medium text-gray-700">Most Expensive Month</p>
+              <p className="text-blue-600">
+                {spendingOverTime.reduce((max, month) => month.spending > max.spending ? month : max).monthName} 
+                (${spendingOverTime.reduce((max, month) => month.spending > max.spending ? month : max).spending.toFixed(2)})
+              </p>
+            </div>
+            <div className="bg-white/50 p-3 rounded-lg">
+              <p className="font-medium text-gray-700">Most Active Year</p>
+              <p className="text-green-600">
+                {tripsByYear.length > 0 ? tripsByYear.reduce((max, year) => year.trips > max.trips ? year : max).year : 'N/A'}
+                {tripsByYear.length > 0 ? ` (${tripsByYear.reduce((max, year) => year.trips > max.trips ? year : max).trips} trips)` : ''}
+              </p>
+            </div>
+            <div className="bg-white/50 p-3 rounded-lg">
+              <p className="font-medium text-gray-700">Best Rated Country</p>
+              <p className="text-purple-600">
+                {entries.length > 0 ? entries.reduce((best, entry) => entry.rating > best.rating ? entry : best).country : 'N/A'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default TravelStatistics;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Edit, Trash2, Save, X, MapPin, Calendar, Star, DollarSign, Tag, Search, Filter, Globe, Target, Download, Upload, Camera, Image as ImageIcon, Map } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, MapPin, Calendar, Star, DollarSign, Tag, Search, Filter, Globe, Target, Download, Upload, Camera, Image as ImageIcon, Map, BarChart3 } from 'lucide-react';
 import TravelMap from './TravelMap';
+import TravelStatistics from './TravelStatistics';
 
 const TravelLogApp = () => {
   const [entries, setEntries] = useState([]);
@@ -9,7 +10,7 @@ const TravelLogApp = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRating, setFilterRating] = useState(0);
   const [filterCountry, setFilterCountry] = useState('');
-  const [currentView, setCurrentView] = useState('grid'); // 'grid' or 'map'
+  const [currentView, setCurrentView] = useState('grid'); // 'grid', 'map', or 'stats'
   const [formData, setFormData] = useState({
     date: '',
     country: '',
@@ -396,7 +397,7 @@ const TravelLogApp = () => {
                 }`}
               >
                 <Target size={16} />
-                <span>Grid View</span>
+                <span>Grid</span>
               </button>
               <button
                 onClick={() => setCurrentView('map')}
@@ -407,7 +408,18 @@ const TravelLogApp = () => {
                 }`}
               >
                 <Map size={16} />
-                <span>Map View</span>
+                <span>Map</span>
+              </button>
+              <button
+                onClick={() => setCurrentView('stats')}
+                className={`px-4 py-2 rounded-md font-medium transition-colors flex items-center space-x-2 ${
+                  currentView === 'stats'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <BarChart3 size={16} />
+                <span>Stats</span>
               </button>
             </div>
             
@@ -416,48 +428,50 @@ const TravelLogApp = () => {
             </div>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search entries..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+          {currentView !== 'stats' && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Search entries..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div className="relative">
+                <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <select
+                  value={filterRating}
+                  onChange={(e) => setFilterRating(Number(e.target.value))}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
+                >
+                  <option value={0}>All Ratings</option>
+                  <option value={5}>5 Stars</option>
+                  <option value={4}>4+ Stars</option>
+                  <option value={3}>3+ Stars</option>
+                  <option value={2}>2+ Stars</option>
+                  <option value={1}>1+ Stars</option>
+                </select>
+              </div>
+              
+              <div className="relative">
+                <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <select
+                  value={filterCountry}
+                  onChange={(e) => setFilterCountry(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
+                >
+                  <option value="">All Countries</option>
+                  {countries.map(country => (
+                    <option key={country} value={country}>{country}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            
-            <div className="relative">
-              <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <select
-                value={filterRating}
-                onChange={(e) => setFilterRating(Number(e.target.value))}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
-              >
-                <option value={0}>All Ratings</option>
-                <option value={5}>5 Stars</option>
-                <option value={4}>4+ Stars</option>
-                <option value={3}>3+ Stars</option>
-                <option value={2}>2+ Stars</option>
-                <option value={1}>1+ Stars</option>
-              </select>
-            </div>
-            
-            <div className="relative">
-              <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <select
-                value={filterCountry}
-                onChange={(e) => setFilterCountry(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
-              >
-                <option value="">All Countries</option>
-                {countries.map(country => (
-                  <option key={country} value={country}>{country}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Modal Form */}
@@ -675,7 +689,7 @@ const TravelLogApp = () => {
           </div>
         )}
 
-        {/* Content Area - Grid or Map */}
+        {/* Content Area - Grid, Map, or Stats */}
         {currentView === 'map' ? (
           <div className="h-[600px] mb-8">
             <TravelMap 
@@ -685,6 +699,10 @@ const TravelLogApp = () => {
                 console.log('Clicked marker for:', entry.title);
               }}
             />
+          </div>
+        ) : currentView === 'stats' ? (
+          <div className="mb-8">
+            <TravelStatistics entries={entries} />
           </div>
         ) : (
           filteredEntries.length === 0 ? (
