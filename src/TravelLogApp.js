@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Edit, Trash2, Save, X, MapPin, Calendar, Star, DollarSign, Tag, Search, Filter, Globe, Target, Download, Upload } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, MapPin, Calendar, Star, DollarSign, Tag, Search, Filter, Globe, Target, Download, Upload, Camera, Image as ImageIcon } from 'lucide-react';
 
 const TravelLogApp = () => {
   const [entries, setEntries] = useState([]);
@@ -16,9 +16,11 @@ const TravelLogApp = () => {
     description: '',
     rating: 1,
     tags: '',
-    expenses: 0
+    expenses: 0,
+    photos: []
   });
   const fileInputRef = useRef(null);
+  const photoInputRef = useRef(null);
 
   useEffect(() => {
     const savedEntries = localStorage.getItem('travelEntries');
@@ -77,7 +79,8 @@ const TravelLogApp = () => {
       description: '',
       rating: 1,
       tags: '',
-      expenses: 0
+      expenses: 0,
+      photos: []
     });
     setEditingEntry(null);
     setIsFormOpen(false);
@@ -120,7 +123,8 @@ const TravelLogApp = () => {
     setEditingEntry(entry);
     setFormData({
       ...entry,
-      tags: entry.tags.join(', ')
+      tags: entry.tags.join(', '),
+      photos: entry.photos || []
     });
     setIsFormOpen(true);
   };
@@ -177,7 +181,8 @@ const TravelLogApp = () => {
           id: entry.id || Date.now() + Math.random(),
           tags: Array.isArray(entry.tags) ? entry.tags : [],
           rating: Number(entry.rating) || 1,
-          expenses: Number(entry.expenses) || 0
+          expenses: Number(entry.expenses) || 0,
+          photos: Array.isArray(entry.photos) ? entry.photos : []
         }));
 
         if (window.confirm(`Import ${processedEntries.length} travel entries? This will add to your existing entries.`)) {
@@ -192,6 +197,85 @@ const TravelLogApp = () => {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  const resizeImage = (file, maxWidth = 800, maxHeight = 600, quality = 0.8) => {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      
+      img.onload = () => {
+        // Calculate new dimensions
+        let { width, height } = img;
+        
+        if (width > height) {
+          if (width > maxWidth) {
+            height = (height * maxWidth) / width;
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = (width * maxHeight) / height;
+            height = maxHeight;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        
+        // Draw and compress
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressedDataUrl);
+      };
+      
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
+  const handlePhotoUpload = (event) => {
+    const files = Array.from(event.target.files);
+    
+    files.forEach(async (file) => {
+      if (file.type.startsWith('image/')) {
+        // Check file size (limit to 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+          alert(`Image ${file.name} is too large. Please choose images under 5MB.`);
+          return;
+        }
+        
+        try {
+          const compressedData = await resizeImage(file);
+          const newPhoto = {
+            id: Date.now() + Math.random(),
+            data: compressedData,
+            name: file.name,
+            size: file.size,
+            compressedSize: Math.round(compressedData.length * 0.75) // Approximate compressed size
+          };
+          
+          setFormData(prev => ({
+            ...prev,
+            photos: [...prev.photos, newPhoto]
+          }));
+        } catch (error) {
+          console.error('Error processing image:', error);
+          alert(`Error processing image ${file.name}`);
+        }
+      }
+    });
+    
+    if (photoInputRef.current) {
+      photoInputRef.current.value = '';
+    }
+  };
+
+  const removePhoto = (photoId) => {
+    setFormData(prev => ({
+      ...prev,
+      photos: prev.photos.filter(photo => photo.id !== photoId)
+    }));
   };
 
   const renderStars = (rating) => {
@@ -491,6 +575,52 @@ const TravelLogApp = () => {
                   </div>
                 </div>
 
+                {/* Photo Upload Section */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Photos
+                  </label>
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-4">
+                      <button
+                        type="button"
+                        onClick={() => photoInputRef.current?.click()}
+                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
+                      >
+                        <Camera size={18} />
+                        <span>Add Photos</span>
+                      </button>
+                      <span className="text-sm text-gray-500">
+                        {formData.photos.length} photo{formData.photos.length !== 1 ? 's' : ''} selected
+                      </span>
+                    </div>
+                    
+                    {formData.photos.length > 0 && (
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        {formData.photos.map((photo) => (
+                          <div key={photo.id} className="relative group">
+                            <img
+                              src={photo.data}
+                              alt={photo.name}
+                              className="w-full h-24 object-cover rounded-lg border border-gray-200"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removePhoto(photo.id)}
+                              className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X size={12} />
+                            </button>
+                            <div className="absolute bottom-1 left-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded">
+                              {photo.compressedSize ? `${(photo.compressedSize / 1024).toFixed(1)}KB` : `${(photo.size / 1024).toFixed(1)}KB`}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
                   <button 
                     type="button" 
@@ -567,6 +697,31 @@ const TravelLogApp = () => {
                     <p className="text-gray-600 text-sm mb-4 line-clamp-3">{entry.description}</p>
                   )}
 
+                  {entry.photos && entry.photos.length > 0 && (
+                    <div className="mb-4">
+                      <div className="flex items-center mb-2">
+                        <ImageIcon size={14} className="text-gray-400 mr-2" />
+                        <span className="text-sm text-gray-500">{entry.photos.length} photo{entry.photos.length !== 1 ? 's' : ''}</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {entry.photos.slice(0, 3).map((photo, index) => (
+                          <div key={photo.id} className="relative">
+                            <img
+                              src={photo.data}
+                              alt={photo.name}
+                              className="w-full h-16 object-cover rounded border border-gray-200"
+                            />
+                            {index === 2 && entry.photos.length > 3 && (
+                              <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded">
+                                <span className="text-white text-xs font-medium">+{entry.photos.length - 3}</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {entry.tags.length > 0 && (
                     <div className="flex items-center mb-4">
                       <Tag size={14} className="text-gray-400 mr-2" />
@@ -595,12 +750,20 @@ const TravelLogApp = () => {
           </div>
         )}
         
-        {/* Hidden file input for import */}
+        {/* Hidden file inputs */}
         <input
           type="file"
           ref={fileInputRef}
           onChange={handleImport}
           accept=".json"
+          style={{ display: 'none' }}
+        />
+        <input
+          type="file"
+          ref={photoInputRef}
+          onChange={handlePhotoUpload}
+          accept="image/*"
+          multiple
           style={{ display: 'none' }}
         />
       </div>
