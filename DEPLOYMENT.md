@@ -43,10 +43,10 @@ Your travel app is fully configured for Vercel deployment with optimized setting
 The following files are already configured for optimal deployment:
 
 ### `vercel.json`
-- Framework detection: Create React App
-- Static asset caching (1 year for immutable files)
+- Single-page app routing with rewrites
+- Static asset caching (1 year for immutable files)  
 - Security headers (XSS protection, frame options)
-- Single-page app routing
+- Simplified configuration for Create React App
 
 ### `.env.production`
 - Disabled source maps for smaller builds
