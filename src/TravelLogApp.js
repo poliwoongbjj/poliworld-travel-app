@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Edit, Trash2, Save, X, MapPin, Calendar, Star, DollarSign, Tag, Search, Filter, Globe, Target, Download, Upload, Camera, Image as ImageIcon, Map, BarChart3 } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, MapPin, Calendar, Star, DollarSign, Tag, Search, Filter, Globe, Target, Download, Upload, Camera, Image as ImageIcon, Map, BarChart3, CreditCard, Banknote, Plane, Car, Home, Wifi, ChefHat, Activity, Heart, Camera as CameraIcon } from 'lucide-react';
 import TravelMap from './TravelMap';
 import TravelStatistics from './TravelStatistics';
 
@@ -11,6 +11,7 @@ const TravelLogApp = () => {
   const [filterRating, setFilterRating] = useState(0);
   const [filterCountry, setFilterCountry] = useState('');
   const [currentView, setCurrentView] = useState('grid'); // 'grid', 'map', or 'stats'
+  const [currentFormTab, setCurrentFormTab] = useState('basic'); // 'basic', 'financial', 'transport', 'accommodation', 'experience', 'health', 'storytelling'
   const [formData, setFormData] = useState({
     date: '',
     country: '',
@@ -20,7 +21,69 @@ const TravelLogApp = () => {
     rating: 1,
     tags: '',
     expenses: 0,
-    photos: []
+    photos: [],
+    // Financial tracking
+    dailySpendUSD: 0,
+    dailySpendLocal: 0,
+    localCurrency: '',
+    expenseBreakdown: {
+      transport: 0,
+      lodging: 0,
+      food: 0,
+      activities: 0,
+      misc: 0
+    },
+    paymentMethods: {
+      cash: 0,
+      card: 0
+    },
+    // Transport data
+    transport: {
+      mode: '',
+      duration: 0,
+      scheduledDuration: 0,
+      costPerKm: 0,
+      distanceKm: 0,
+      overnight: false
+    },
+    // Accommodation data
+    accommodation: {
+      type: '',
+      costPerNight: 0,
+      amenities: {
+        wifi: false,
+        kitchen: false,
+        locationRating: 1
+      },
+      sleepRating: 1
+    },
+    // Time tracking
+    timeTracking: {
+      daysSpent: 1,
+      transitTime: 0,
+      explorationTime: 0
+    },
+    // Experience analytics
+    experience: {
+      siteRatings: [],
+      crowdLevel: 1,
+      accessibility: 1,
+      culturalNotes: ''
+    },
+    // Health & fitness
+    health: {
+      stepsPerDay: 0,
+      kmWalked: 0,
+      altitudeChange: 0,
+      healthNotes: ''
+    },
+    // Storytelling data
+    storytelling: {
+      photosCount: 0,
+      socialEngagement: 0,
+      favoriteMeal: '',
+      newFoodsTried: []
+    }
   });
   const fileInputRef = useRef(null);
   const photoInputRef = useRef(null);
@@ -83,17 +146,103 @@ const TravelLogApp = () => {
       rating: 1,
       tags: '',
       expenses: 0,
-      photos: []
+      photos: [],
+      // Financial tracking
+      dailySpendUSD: 0,
+      dailySpendLocal: 0,
+      localCurrency: '',
+      expenseBreakdown: {
+        transport: 0,
+        lodging: 0,
+        food: 0,
+        activities: 0,
+        misc: 0
+      },
+      paymentMethods: {
+        cash: 0,
+        card: 0
+      },
+      // Transport data
+      transport: {
+        mode: '',
+        duration: 0,
+        scheduledDuration: 0,
+        costPerKm: 0,
+        distanceKm: 0,
+        overnight: false
+      },
+      // Accommodation data
+      accommodation: {
+        type: '',
+        costPerNight: 0,
+        amenities: {
+          wifi: false,
+          kitchen: false,
+          locationRating: 1
+        },
+        sleepRating: 1
+      },
+      // Time tracking
+      timeTracking: {
+        daysSpent: 1,
+        transitTime: 0,
+        explorationTime: 0
+      },
+      // Experience analytics
+      experience: {
+        siteRatings: [],
+        crowdLevel: 1,
+        accessibility: 1,
+        culturalNotes: ''
+      },
+      // Health & fitness
+      health: {
+        stepsPerDay: 0,
+        kmWalked: 0,
+        altitudeChange: 0,
+        healthNotes: ''
+      },
+      // Storytelling data
+      storytelling: {
+        photosCount: 0,
+        socialEngagement: 0,
+        favoriteMeal: '',
+        newFoodsTried: []
+      }
     });
     setEditingEntry(null);
     setIsFormOpen(false);
+    setCurrentFormTab('basic');
   };
 
   const handleInputChange = (e) => {
-    const { name, value, type } = e.target;
+    const { name, value, type, checked } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'number' ? parseFloat(value) || 0 : value
+      [name]: type === 'number' ? parseFloat(value) || 0 : type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleNestedInputChange = (category, field, value, type = 'text') => {
+    setFormData(prev => ({
+      ...prev,
+      [category]: {
+        ...prev[category],
+        [field]: type === 'number' ? parseFloat(value) || 0 : type === 'checkbox' ? value : value
+      }
+    }));
+  };
+
+  const handleDeepNestedInputChange = (category, subcategory, field, value, type = 'text') => {
+    setFormData(prev => ({
+      ...prev,
+      [category]: {
+        ...prev[category],
+        [subcategory]: {
+          ...prev[category][subcategory],
+          [field]: type === 'number' ? parseFloat(value) || 0 : type === 'checkbox' ? value : value
+        }
+      }
     }));
   };
 
@@ -127,7 +276,16 @@ const TravelLogApp = () => {
     setFormData({
       ...entry,
       tags: entry.tags.join(', '),
-      photos: entry.photos || []
+      photos: entry.photos || [],
+      // Ensure all nested objects exist with defaults for backward compatibility
+      expenseBreakdown: entry.expenseBreakdown || { transport: 0, lodging: 0, food: 0, activities: 0, misc: 0 },
+      paymentMethods: entry.paymentMethods || { cash: 0, card: 0 },
+      transport: entry.transport || { mode: '', duration: 0, scheduledDuration: 0, costPerKm: 0, distanceKm: 0, overnight: false },
+      accommodation: entry.accommodation || { type: '', costPerNight: 0, amenities: { wifi: false, kitchen: false, locationRating: 1 }, sleepRating: 1 },
+      timeTracking: entry.timeTracking || { daysSpent: 1, transitTime: 0, explorationTime: 0 },
+      experience: entry.experience || { siteRatings: [], crowdLevel: 1, accessibility: 1, culturalNotes: '' },
+      health: entry.health || { stepsPerDay: 0, kmWalked: 0, altitudeChange: 0, healthNotes: '' },
+      storytelling: entry.storytelling || { photosCount: 0, socialEngagement: 0, favoriteMeal: '', newFoodsTried: [] }
     });
     setIsFormOpen(true);
   };
@@ -490,183 +648,750 @@ const TravelLogApp = () => {
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-2">
-                      Date *
-                    </label>
-                    <input
-                      type="date"
-                      id="date"
-                      name="date"
-                      value={formData.date}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="rating" className="block text-sm font-medium text-gray-700 mb-2">
-                      Rating *
-                    </label>
-                    <select
-                      id="rating"
-                      name="rating"
-                      value={formData.rating}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      {[1, 2, 3, 4, 5].map(num => (
-                        <option key={num} value={num}>{num} Star{num > 1 ? 's' : ''}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label htmlFor="country" className="block text-sm font-medium text-gray-700 mb-2">
-                      Country *
-                    </label>
-                    <input
-                      type="text"
-                      id="country"
-                      name="country"
-                      value={formData.country}
-                      onChange={handleInputChange}
-                      placeholder="e.g., Japan"
-                      required
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-2">
-                      City *
-                    </label>
-                    <input
-                      type="text"
-                      id="city"
-                      name="city"
-                      value={formData.city}
-                      onChange={handleInputChange}
-                      placeholder="e.g., Tokyo"
-                      required
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
-                    Title *
-                  </label>
-                  <input
-                    type="text"
-                    id="title"
-                    name="title"
-                    value={formData.title}
-                    onChange={handleInputChange}
-                    placeholder="e.g., Amazing trip to Tokyo"
-                    required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                    Description
-                  </label>
-                  <textarea
-                    id="description"
-                    name="description"
-                    value={formData.description}
-                    onChange={handleInputChange}
-                    placeholder="Tell us about your experience..."
-                    rows={4}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label htmlFor="tags" className="block text-sm font-medium text-gray-700 mb-2">
-                      Tags
-                    </label>
-                    <input
-                      type="text"
-                      id="tags"
-                      name="tags"
-                      value={formData.tags}
-                      onChange={handleInputChange}
-                      placeholder="adventure, food, culture (comma separated)"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="expenses" className="block text-sm font-medium text-gray-700 mb-2">
-                      Expenses ($)
-                    </label>
-                    <input
-                      type="number"
-                      id="expenses"
-                      name="expenses"
-                      value={formData.expenses}
-                      onChange={handleInputChange}
-                      placeholder="0"
-                      min="0"
-                      step="0.01"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-
-                {/* Photo Upload Section */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Photos
-                  </label>
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-4">
+              {/* Tab Navigation */}
+              <div className="border-b border-gray-200 px-6">
+                <nav className="flex space-x-8">
+                  {[
+                    { id: 'basic', label: 'Basic Info', icon: Globe },
+                    { id: 'financial', label: 'Financial', icon: DollarSign },
+                    { id: 'transport', label: 'Transport', icon: Plane },
+                    { id: 'accommodation', label: 'Stay', icon: Home },
+                    { id: 'experience', label: 'Experience', icon: Star },
+                    { id: 'health', label: 'Health', icon: Heart },
+                    { id: 'storytelling', label: 'Story', icon: CameraIcon }
+                  ].map((tab) => {
+                    const Icon = tab.icon;
+                    return (
                       <button
+                        key={tab.id}
                         type="button"
-                        onClick={() => photoInputRef.current?.click()}
-                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
+                        onClick={() => setCurrentFormTab(tab.id)}
+                        className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
+                          currentFormTab === tab.id
+                            ? 'border-blue-500 text-blue-600'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        }`}
                       >
-                        <Camera size={18} />
-                        <span>Add Photos</span>
+                        <Icon size={16} />
+                        <span>{tab.label}</span>
                       </button>
-                      <span className="text-sm text-gray-500">
-                        {formData.photos.length} photo{formData.photos.length !== 1 ? 's' : ''} selected
-                      </span>
+                    );
+                  })}
+                </nav>
+              </div>
+
+              <form onSubmit={handleSubmit} className="p-6 space-y-6">
+                {/* Basic Info Tab */}
+                {currentFormTab === 'basic' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-2">
+                          Date *
+                        </label>
+                        <input
+                          type="date"
+                          id="date"
+                          name="date"
+                          value={formData.date}
+                          onChange={handleInputChange}
+                          required
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="rating" className="block text-sm font-medium text-gray-700 mb-2">
+                          Overall Rating *
+                        </label>
+                        <select
+                          id="rating"
+                          name="rating"
+                          value={formData.rating}
+                          onChange={handleInputChange}
+                          required
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          {[1, 2, 3, 4, 5].map(num => (
+                            <option key={num} value={num}>{num} Star{num > 1 ? 's' : ''}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                    
-                    {formData.photos.length > 0 && (
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                        {formData.photos.map((photo) => (
-                          <div key={photo.id} className="relative group">
-                            <img
-                              src={photo.data}
-                              alt={photo.name}
-                              className="w-full h-24 object-cover rounded-lg border border-gray-200"
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label htmlFor="country" className="block text-sm font-medium text-gray-700 mb-2">
+                          Country *
+                        </label>
+                        <input
+                          type="text"
+                          id="country"
+                          name="country"
+                          value={formData.country}
+                          onChange={handleInputChange}
+                          placeholder="e.g., Japan"
+                          required
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-2">
+                          City *
+                        </label>
+                        <input
+                          type="text"
+                          id="city"
+                          name="city"
+                          value={formData.city}
+                          onChange={handleInputChange}
+                          placeholder="e.g., Tokyo"
+                          required
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
+                        Title *
+                      </label>
+                      <input
+                        type="text"
+                        id="title"
+                        name="title"
+                        value={formData.title}
+                        onChange={handleInputChange}
+                        placeholder="e.g., Amazing trip to Tokyo"
+                        required
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+                        Description
+                      </label>
+                      <textarea
+                        id="description"
+                        name="description"
+                        value={formData.description}
+                        onChange={handleInputChange}
+                        placeholder="Tell us about your experience..."
+                        rows={4}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label htmlFor="tags" className="block text-sm font-medium text-gray-700 mb-2">
+                          Tags
+                        </label>
+                        <input
+                          type="text"
+                          id="tags"
+                          name="tags"
+                          value={formData.tags}
+                          onChange={handleInputChange}
+                          placeholder="adventure, food, culture (comma separated)"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Days Spent
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.timeTracking?.daysSpent || 1}
+                          onChange={(e) => handleNestedInputChange('timeTracking', 'daysSpent', e.target.value, 'number')}
+                          placeholder="1"
+                          min="1"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Photo Upload Section */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Photos
+                      </label>
+                      <div className="space-y-4">
+                        <div className="flex items-center space-x-4">
+                          <button
+                            type="button"
+                            onClick={() => photoInputRef.current?.click()}
+                            className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
+                          >
+                            <Camera size={18} />
+                            <span>Add Photos</span>
+                          </button>
+                          <span className="text-sm text-gray-500">
+                            {formData.photos.length} photo{formData.photos.length !== 1 ? 's' : ''} selected
+                          </span>
+                        </div>
+                        
+                        {formData.photos.length > 0 && (
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            {formData.photos.map((photo) => (
+                              <div key={photo.id} className="relative group">
+                                <img
+                                  src={photo.data}
+                                  alt={photo.name}
+                                  className="w-full h-24 object-cover rounded-lg border border-gray-200"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => removePhoto(photo.id)}
+                                  className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <X size={12} />
+                                </button>
+                                <div className="absolute bottom-1 left-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded">
+                                  {photo.compressedSize ? `${(photo.compressedSize / 1024).toFixed(1)}KB` : `${(photo.size / 1024).toFixed(1)}KB`}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Financial Tab */}
+                {currentFormTab === 'financial' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Daily Spend (USD)
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.dailySpendUSD || 0}
+                          onChange={(e) => handleInputChange({target: {name: 'dailySpendUSD', value: e.target.value, type: 'number'}})}
+                          placeholder="0"
+                          min="0"
+                          step="0.01"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Daily Spend (Local)
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.dailySpendLocal || 0}
+                          onChange={(e) => handleInputChange({target: {name: 'dailySpendLocal', value: e.target.value, type: 'number'}})}
+                          placeholder="0"
+                          min="0"
+                          step="0.01"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Local Currency
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.localCurrency || ''}
+                          onChange={(e) => handleInputChange({target: {name: 'localCurrency', value: e.target.value}})}
+                          placeholder="e.g., JPY, EUR"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-4">Expense Breakdown</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        {[
+                          { key: 'transport', label: 'Transport', icon: Car },
+                          { key: 'lodging', label: 'Lodging', icon: Home },
+                          { key: 'food', label: 'Food', icon: ChefHat },
+                          { key: 'activities', label: 'Activities', icon: Activity },
+                          { key: 'misc', label: 'Misc', icon: Tag }
+                        ].map(({ key, label, icon: Icon }) => (
+                          <div key={key}>
+                            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                              <Icon size={14} className="mr-2" />
+                              {label}
+                            </label>
+                            <input
+                              type="number"
+                              value={formData.expenseBreakdown?.[key] || 0}
+                              onChange={(e) => handleNestedInputChange('expenseBreakdown', key, e.target.value, 'number')}
+                              placeholder="0"
+                              min="0"
+                              step="0.01"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
-                            <button
-                              type="button"
-                              onClick={() => removePhoto(photo.id)}
-                              className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <X size={12} />
-                            </button>
-                            <div className="absolute bottom-1 left-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded">
-                              {photo.compressedSize ? `${(photo.compressedSize / 1024).toFixed(1)}KB` : `${(photo.size / 1024).toFixed(1)}KB`}
-                            </div>
                           </div>
                         ))}
                       </div>
-                    )}
+                    </div>
+
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-4">Payment Methods</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                            <Banknote size={14} className="mr-2" />
+                            Cash Amount
+                          </label>
+                          <input
+                            type="number"
+                            value={formData.paymentMethods?.cash || 0}
+                            onChange={(e) => handleNestedInputChange('paymentMethods', 'cash', e.target.value, 'number')}
+                            placeholder="0"
+                            min="0"
+                            step="0.01"
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                            <CreditCard size={14} className="mr-2" />
+                            Card Amount
+                          </label>
+                          <input
+                            type="number"
+                            value={formData.paymentMethods?.card || 0}
+                            onChange={(e) => handleNestedInputChange('paymentMethods', 'card', e.target.value, 'number')}
+                            placeholder="0"
+                            min="0"
+                            step="0.01"
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="expenses" className="block text-sm font-medium text-gray-700 mb-2">
+                        Total Expenses ($) - Legacy Field
+                      </label>
+                      <input
+                        type="number"
+                        id="expenses"
+                        name="expenses"
+                        value={formData.expenses}
+                        onChange={handleInputChange}
+                        placeholder="0"
+                        min="0"
+                        step="0.01"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {/* Transport Tab */}
+                {currentFormTab === 'transport' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Transport Mode
+                        </label>
+                        <select
+                          value={formData.transport?.mode || ''}
+                          onChange={(e) => handleNestedInputChange('transport', 'mode', e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="">Select mode</option>
+                          <option value="bus">Bus</option>
+                          <option value="flight">Flight</option>
+                          <option value="ferry">Ferry</option>
+                          <option value="rideshare">Rideshare</option>
+                          <option value="walk">Walk</option>
+                          <option value="train">Train</option>
+                          <option value="car">Car</option>
+                          <option value="bike">Bike</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={formData.transport?.overnight || false}
+                            onChange={(e) => handleNestedInputChange('transport', 'overnight', e.target.checked, 'checkbox')}
+                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          />
+                          <span className="text-sm font-medium text-gray-700">Overnight Journey</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Actual Duration (hours)
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.transport?.duration || 0}
+                          onChange={(e) => handleNestedInputChange('transport', 'duration', e.target.value, 'number')}
+                          placeholder="0"
+                          min="0"
+                          step="0.1"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Scheduled Duration (hours)
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.transport?.scheduledDuration || 0}
+                          onChange={(e) => handleNestedInputChange('transport', 'scheduledDuration', e.target.value, 'number')}
+                          placeholder="0"
+                          min="0"
+                          step="0.1"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Distance (km)
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.transport?.distanceKm || 0}
+                          onChange={(e) => handleNestedInputChange('transport', 'distanceKm', e.target.value, 'number')}
+                          placeholder="0"
+                          min="0"
+                          step="0.1"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Cost per km ($)
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.transport?.costPerKm || 0}
+                          onChange={(e) => handleNestedInputChange('transport', 'costPerKm', e.target.value, 'number')}
+                          placeholder="0"
+                          min="0"
+                          step="0.01"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Accommodation Tab */}
+                {currentFormTab === 'accommodation' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Accommodation Type
+                        </label>
+                        <select
+                          value={formData.accommodation?.type || ''}
+                          onChange={(e) => handleNestedInputChange('accommodation', 'type', e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="">Select type</option>
+                          <option value="hostel">Hostel</option>
+                          <option value="airbnb">Airbnb</option>
+                          <option value="hotel">Hotel</option>
+                          <option value="guesthouse">Guesthouse</option>
+                          <option value="camping">Camping</option>
+                          <option value="friend">Friend/Family</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Cost per Night ($)
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.accommodation?.costPerNight || 0}
+                          onChange={(e) => handleNestedInputChange('accommodation', 'costPerNight', e.target.value, 'number')}
+                          placeholder="0"
+                          min="0"
+                          step="0.01"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-4">Amenities & Ratings</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-4">
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={formData.accommodation?.amenities?.wifi || false}
+                              onChange={(e) => handleDeepNestedInputChange('accommodation', 'amenities', 'wifi', e.target.checked, 'checkbox')}
+                              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            />
+                            <Wifi size={16} className="text-gray-500" />
+                            <span className="text-sm font-medium text-gray-700">WiFi Available</span>
+                          </label>
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={formData.accommodation?.amenities?.kitchen || false}
+                              onChange={(e) => handleDeepNestedInputChange('accommodation', 'amenities', 'kitchen', e.target.checked, 'checkbox')}
+                              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            />
+                            <ChefHat size={16} className="text-gray-500" />
+                            <span className="text-sm font-medium text-gray-700">Kitchen Access</span>
+                          </label>
+                        </div>
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Location Rating (1-5)
+                            </label>
+                            <select
+                              value={formData.accommodation?.amenities?.locationRating || 1}
+                              onChange={(e) => handleDeepNestedInputChange('accommodation', 'amenities', 'locationRating', e.target.value, 'number')}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                              {[1, 2, 3, 4, 5].map(num => (
+                                <option key={num} value={num}>{num} Star{num > 1 ? 's' : ''}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Sleep Quality (1-10)
+                            </label>
+                            <select
+                              value={formData.accommodation?.sleepRating || 1}
+                              onChange={(e) => handleNestedInputChange('accommodation', 'sleepRating', e.target.value, 'number')}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
+                                <option key={num} value={num}>{num}/10</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Experience Tab */}
+                {currentFormTab === 'experience' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Crowd Level (1-5)
+                        </label>
+                        <select
+                          value={formData.experience?.crowdLevel || 1}
+                          onChange={(e) => handleNestedInputChange('experience', 'crowdLevel', e.target.value, 'number')}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value={1}>1 - Very quiet</option>
+                          <option value={2}>2 - Quiet</option>
+                          <option value={3}>3 - Moderate</option>
+                          <option value={4}>4 - Busy</option>
+                          <option value={5}>5 - Very crowded</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Accessibility (1-5)
+                        </label>
+                        <select
+                          value={formData.experience?.accessibility || 1}
+                          onChange={(e) => handleNestedInputChange('experience', 'accessibility', e.target.value, 'number')}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value={1}>1 - Very difficult</option>
+                          <option value={2}>2 - Difficult</option>
+                          <option value={3}>3 - Moderate</option>
+                          <option value={4}>4 - Easy</option>
+                          <option value={5}>5 - Very accessible</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Cultural Notes
+                      </label>
+                      <textarea
+                        value={formData.experience?.culturalNotes || ''}
+                        onChange={(e) => handleNestedInputChange('experience', 'culturalNotes', e.target.value)}
+                        placeholder="Unique cultural experiences, food, people, vibe..."
+                        rows={4}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Transit Time (hours/day)
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.timeTracking?.transitTime || 0}
+                          onChange={(e) => handleNestedInputChange('timeTracking', 'transitTime', e.target.value, 'number')}
+                          placeholder="0"
+                          min="0"
+                          step="0.1"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Exploration Time (hours/day)
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.timeTracking?.explorationTime || 0}
+                          onChange={(e) => handleNestedInputChange('timeTracking', 'explorationTime', e.target.value, 'number')}
+                          placeholder="0"
+                          min="0"
+                          step="0.1"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Health Tab */}
+                {currentFormTab === 'health' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Steps per Day
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.health?.stepsPerDay || 0}
+                          onChange={(e) => handleNestedInputChange('health', 'stepsPerDay', e.target.value, 'number')}
+                          placeholder="0"
+                          min="0"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Km Walked per Day
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.health?.kmWalked || 0}
+                          onChange={(e) => handleNestedInputChange('health', 'kmWalked', e.target.value, 'number')}
+                          placeholder="0"
+                          min="0"
+                          step="0.1"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Altitude Change (m)
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.health?.altitudeChange || 0}
+                          onChange={(e) => handleNestedInputChange('health', 'altitudeChange', e.target.value, 'number')}
+                          placeholder="0"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Health & Travel Fatigue Notes
+                      </label>
+                      <textarea
+                        value={formData.health?.healthNotes || ''}
+                        onChange={(e) => handleNestedInputChange('health', 'healthNotes', e.target.value)}
+                        placeholder="Any illness, fatigue, or health observations..."
+                        rows={4}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Storytelling Tab */}
+                {currentFormTab === 'storytelling' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Photos Count
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.storytelling?.photosCount || 0}
+                          onChange={(e) => handleNestedInputChange('storytelling', 'photosCount', e.target.value, 'number')}
+                          placeholder="0"
+                          min="0"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Social Media Engagement
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.storytelling?.socialEngagement || 0}
+                          onChange={(e) => handleNestedInputChange('storytelling', 'socialEngagement', e.target.value, 'number')}
+                          placeholder="0"
+                          min="0"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Favorite Meal
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.storytelling?.favoriteMeal || ''}
+                        onChange={(e) => handleNestedInputChange('storytelling', 'favoriteMeal', e.target.value)}
+                        placeholder="Describe your favorite meal from this location..."
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        New Foods Tried
+                      </label>
+                      <input
+                        type="text"
+                        value={Array.isArray(formData.storytelling?.newFoodsTried) ? formData.storytelling.newFoodsTried.join(', ') : ''}
+                        onChange={(e) => handleNestedInputChange('storytelling', 'newFoodsTried', e.target.value.split(',').map(food => food.trim()).filter(Boolean))}
+                        placeholder="ramen, sushi, tempura (comma separated)"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
                   <button 
