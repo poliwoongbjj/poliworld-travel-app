@@ -112,7 +112,27 @@ const TravelLogApp = () => {
 
   // Save to localStorage whenever entries change
   useEffect(() => {
-    localStorage.setItem("travelEntries", JSON.stringify(entries));
+    try {
+      const dataString = JSON.stringify(entries);
+      // Check storage size (approximate)
+      const dataSize = new Blob([dataString]).size;
+      const maxSize = 4 * 1024 * 1024; // 4MB limit (conservative)
+      
+      if (dataSize > maxSize) {
+        alert("Storage limit approaching. Consider reducing photo sizes or number of photos per entry.");
+        return;
+      }
+      
+      localStorage.setItem("travelEntries", dataString);
+    } catch (error) {
+      if (error.name === 'QuotaExceededError') {
+        alert("Storage full! Please remove some photos or entries to continue.");
+        // Remove the last entry that caused the overflow
+        setEntries(prev => prev.slice(0, -1));
+      } else {
+        console.error("Error saving to localStorage:", error);
+      }
+    }
   }, [entries]);
 
   const handleInputChange = (field, value) => {
@@ -124,19 +144,64 @@ const TravelLogApp = () => {
 
   const handlePhotoUpload = (event) => {
     const files = Array.from(event.target.files);
+    
+    // Check total photo limit per entry
+    if (currentEntry.photos.length + files.length > 3) {
+      alert("Maximum 3 photos per entry allowed. Please remove some photos first.");
+      return;
+    }
+    
     files.forEach((file) => {
+      // Check file size (limit to 5MB per photo)
+      if (file.size > 5 * 1024 * 1024) {
+        alert(`Photo "${file.name}" is too large. Please use photos under 5MB.`);
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = (e) => {
-        const newPhoto = {
-          id: Date.now() + Math.random(),
-          url: e.target.result,
-          name: file.name,
-          uploadDate: new Date().toISOString(),
+        // Create a canvas to resize the image
+        const img = document.createElement('img');
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          // Calculate new dimensions (max 1200px width/height)
+          const maxSize = 1200;
+          let { width, height } = img;
+          
+          if (width > height) {
+            if (width > maxSize) {
+              height = (height * maxSize) / width;
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width = (width * maxSize) / height;
+              height = maxSize;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          
+          // Draw and compress the image
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7); // 70% quality
+          
+          const newPhoto = {
+            id: Date.now() + Math.random(),
+            url: compressedDataUrl,
+            name: file.name,
+            uploadDate: new Date().toISOString(),
+          };
+          
+          setCurrentEntry((prev) => ({
+            ...prev,
+            photos: [...prev.photos, newPhoto],
+          }));
         };
-        setCurrentEntry((prev) => ({
-          ...prev,
-          photos: [...prev.photos, newPhoto],
-        }));
+        img.src = e.target.result;
       };
       reader.readAsDataURL(file);
     });
@@ -906,8 +971,8 @@ const TravelLogApp = () => {
       <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
         {/* Header */}
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6 sm:mb-8">
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-3 sm:gap-4">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+            <div className="flex items-center gap-3 sm:gap-4 flex-1">
               <img
                 src="/poliworld-logo.png"
                 alt="PoliWorld Logo"
@@ -916,8 +981,8 @@ const TravelLogApp = () => {
               <div className="min-w-0 flex-1">
                 <h1
                   className="text-2xl sm:text-3xl font-bold text-left        
-             bg-gradient-to-r from-purple-600 via-blue-600 
-             to-green-500 bg-clip-text text-transparent mb-1 sm:mb-2"
+               bg-gradient-to-r from-purple-600 via-blue-600 
+               to-green-500 bg-clip-text text-transparent mb-1 sm:mb-2"
                 >
                   PoliWorld
                 </h1>
@@ -937,7 +1002,7 @@ const TravelLogApp = () => {
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+            <div className="flex flex-wrap gap-2 justify-center lg:justify-end">
               <button
                 onClick={() => setShowForm(true)}
                 className="bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1 sm:gap-2 hover:bg-blue-700 transition-colors text-sm sm:text-base flex-1 sm:flex-none justify-center"
@@ -2104,15 +2169,31 @@ const TravelLogApp = () => {
               .sort((a, b) => new Date(b.date) - new Date(a.date))
               .map((entry, index) => (
               <div key={entry.id} className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
-                <div className="flex justify-between items-start mb-4">
+                <div className="flex flex-col xl:flex-row xl:justify-between xl:items-start mb-4 gap-4">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 sm:gap-3 mb-2">
-                      <span className="bg-blue-600 text-white rounded-full w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center text-xs sm:text-sm font-bold flex-shrink-0">
-                        {filteredEntries.length - index}
-                      </span>
-                      <h3 className="text-lg sm:text-xl font-bold text-gray-800 truncate">
-                        {entry.title}
-                      </h3>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <span className="bg-blue-600 text-white rounded-full w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center text-xs sm:text-sm font-bold flex-shrink-0">
+                          {filteredEntries.length - index}
+                        </span>
+                        <h3 className="text-lg sm:text-xl font-bold text-gray-800">
+                          {entry.title}
+                        </h3>
+                      </div>
+                      <div className="flex gap-2 xl:hidden">
+                        <button
+                          onClick={() => editEntry(entry)}
+                          className="text-blue-600 hover:text-blue-800 p-2"
+                        >
+                          <Edit3 size={16} />
+                        </button>
+                        <button
+                          onClick={() => deleteEntry(entry.id)}
+                          className="text-red-600 hover:text-red-800 p-2"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-gray-600 mb-2 text-sm sm:text-base">
                       <span className="flex items-center gap-1">
@@ -2140,8 +2221,64 @@ const TravelLogApp = () => {
                         ))}
                       </div>
                     )}
+                    <p className="text-gray-700 text-left text-sm mb-3 xl:mb-0">{entry.description}</p>
                   </div>
-                  <div className="flex gap-2">
+                  
+                  {/* Photos Display - responsive layout */}
+                  {entry.photos && entry.photos.length > 0 && (
+                    <div className="w-full xl:w-auto xl:ml-4 xl:flex-shrink-0">
+                      {/* Mobile/Tablet: horizontal scroll */}
+                      <div className="xl:hidden">
+                        <div className="flex gap-2 overflow-x-auto pb-2">
+                          {entry.photos.map((photo) => (
+                            <div key={photo.id} className="relative group flex-shrink-0">
+                              <img
+                                src={photo.url}
+                                alt={photo.name}
+                                className="w-24 h-24 sm:w-32 sm:h-32 object-cover rounded border hover:opacity-75 transition-opacity cursor-pointer"
+                                onClick={() => window.open(photo.url, "_blank")}
+                              />
+                              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all rounded flex items-center justify-center">
+                                <Camera
+                                  className="text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                  size={16}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* Desktop: side display */}
+                      <div className="hidden xl:block">
+                        <div className="flex gap-2">
+                          {entry.photos.slice(0, 3).map((photo) => (
+                            <div key={photo.id} className="relative group">
+                              <img
+                                src={photo.url}
+                                alt={photo.name}
+                                className="w-48 h-48 object-cover rounded border hover:opacity-75 transition-opacity cursor-pointer"
+                                onClick={() => window.open(photo.url, "_blank")}
+                              />
+                              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all rounded flex items-center justify-center">
+                                <Camera
+                                  className="text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                  size={20}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {entry.photos.length > 3 && (
+                          <p className="text-xs text-gray-500 mt-1 text-center">
+                            +{entry.photos.length - 3} more
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="hidden xl:flex gap-2 ml-2">
                     <button
                       onClick={() => editEntry(entry)}
                       className="text-blue-600 hover:text-blue-800 p-2"
@@ -2156,36 +2293,6 @@ const TravelLogApp = () => {
                     </button>
                   </div>
                 </div>
-
-                <p className="text-gray-700 mb-4 text-left">{entry.description}</p>
-
-                {/* Photos Display */}
-                {entry.photos && entry.photos.length > 0 && (
-                  <div className="mb-4">
-                    <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                      <Image size={16} />
-                      Photos ({entry.photos.length})
-                    </h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                      {entry.photos.map((photo) => (
-                        <div key={photo.id} className="relative group">
-                          <img
-                            src={photo.url}
-                            alt={photo.name}
-                            className="w-full h-20 object-cover rounded border hover:opacity-75 transition-opacity cursor-pointer"
-                            onClick={() => window.open(photo.url, "_blank")}
-                          />
-                          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all rounded flex items-center justify-center">
-                            <Camera
-                              className="text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                              size={16}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 {entry.expenses.length > 0 && (
                   <div className="border-t pt-4">
