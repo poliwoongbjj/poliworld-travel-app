@@ -35,6 +35,30 @@ import {
 } from "recharts";
 
 const TravelLogApp = () => {
+  // Currency conversion rates (approximate rates as of 2024)
+  const getCurrencyRate = (currency) => {
+    const rates = {
+      USD: 1.0,
+      MXN: 0.059, // Mexican Peso
+      NIO: 0.027, // Nicaraguan Córdoba
+      CRC: 0.002, // Costa Rican Colón
+      PAB: 1.0, // Panamanian Balboa (pegged to USD)
+      COP: 0.00025, // Colombian Peso
+      PEN: 0.27, // Peruvian Sol
+      BOB: 0.145, // Bolivian Boliviano
+      PYG: 0.00014, // Paraguayan Guaraní
+      CLP: 0.0011, // Chilean Peso
+      ARS: 0.0011, // Argentine Peso
+      UYU: 0.026, // Uruguayan Peso
+      BRL: 0.2, // Brazilian Real
+    };
+    return rates[currency] || 1.0;
+  };
+
+  const convertToUSD = (amount, currency) => {
+    return amount * getCurrencyRate(currency);
+  };
+
   const [entries, setEntries] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
@@ -42,6 +66,11 @@ const TravelLogApp = () => {
   const [filterCountry, setFilterCountry] = useState("");
   const [showStats, setShowStats] = useState(false);
   const [showMap, setShowMap] = useState(false);
+  const [showBudgetSettings, setShowBudgetSettings] = useState(false);
+  const [budget, setBudget] = useState({
+    totalCashBudget: 0,
+    totalCardBudget: 0,
+  });
   const [currentEntry, setCurrentEntry] = useState({
     id: "",
     date: new Date().toISOString().split("T")[0],
@@ -96,6 +125,10 @@ const TravelLogApp = () => {
     kmWalked: 0,
     altitude: 0,
     healthNotes: "",
+    // Exercise & Training
+    exerciseType: "", // jiujitsu, mma, weightlifting
+    gymVisits: [], // Array of gym objects with name, location, notes, rating
+    trainingHours: 0,
     // Storytelling data
     socialEngagement: 0,
     favoriteMeal: "",
@@ -108,12 +141,46 @@ const TravelLogApp = () => {
     if (savedEntries) {
       setEntries(JSON.parse(savedEntries));
     }
+    
+    const savedBudget = localStorage.getItem("travelBudget");
+    if (savedBudget) {
+      setBudget(JSON.parse(savedBudget));
+    }
   }, []);
 
   // Save to localStorage whenever entries change
   useEffect(() => {
-    localStorage.setItem("travelEntries", JSON.stringify(entries));
+    try {
+      const dataString = JSON.stringify(entries);
+      // Check storage size (approximate)
+      const dataSize = new Blob([dataString]).size;
+      const maxSize = 4 * 1024 * 1024; // 4MB limit (conservative)
+
+      if (dataSize > maxSize) {
+        alert(
+          "Storage limit approaching. Consider reducing photo sizes or number of photos per entry."
+        );
+        return;
+      }
+
+      localStorage.setItem("travelEntries", dataString);
+    } catch (error) {
+      if (error.name === "QuotaExceededError") {
+        alert(
+          "Storage full! Please remove some photos or entries to continue."
+        );
+        // Remove the last entry that caused the overflow
+        setEntries((prev) => prev.slice(0, -1));
+      } else {
+        console.error("Error saving to localStorage:", error);
+      }
+    }
   }, [entries]);
+
+  // Save budget to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem("travelBudget", JSON.stringify(budget));
+  }, [budget]);
 
   const handleInputChange = (field, value) => {
     setCurrentEntry((prev) => ({
@@ -124,19 +191,68 @@ const TravelLogApp = () => {
 
   const handlePhotoUpload = (event) => {
     const files = Array.from(event.target.files);
+
+    // Check total photo limit per entry
+    if (currentEntry.photos.length + files.length > 3) {
+      alert(
+        "Maximum 3 photos per entry allowed. Please remove some photos first."
+      );
+      return;
+    }
+
     files.forEach((file) => {
+      // Check file size (limit to 5MB per photo)
+      if (file.size > 5 * 1024 * 1024) {
+        alert(
+          `Photo "${file.name}" is too large. Please use photos under 5MB.`
+        );
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = (e) => {
-        const newPhoto = {
-          id: Date.now() + Math.random(),
-          url: e.target.result,
-          name: file.name,
-          uploadDate: new Date().toISOString(),
+        // Create a canvas to resize the image
+        const img = document.createElement("img");
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+
+          // Calculate new dimensions (max 1200px width/height)
+          const maxSize = 1200;
+          let { width, height } = img;
+
+          if (width > height) {
+            if (width > maxSize) {
+              height = (height * maxSize) / width;
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width = (width * maxSize) / height;
+              height = maxSize;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          // Draw and compress the image
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.7); // 70% quality
+
+          const newPhoto = {
+            id: Date.now() + Math.random(),
+            url: compressedDataUrl,
+            name: file.name,
+            uploadDate: new Date().toISOString(),
+          };
+
+          setCurrentEntry((prev) => ({
+            ...prev,
+            photos: [...prev.photos, newPhoto],
+          }));
         };
-        setCurrentEntry((prev) => ({
-          ...prev,
-          photos: [...prev.photos, newPhoto],
-        }));
+        img.src = e.target.result;
       };
       reader.readAsDataURL(file);
     });
@@ -194,11 +310,7 @@ const TravelLogApp = () => {
   };
 
   const handleSubmit = async () => {
-    if (
-      !currentEntry.title ||
-      !currentEntry.country ||
-      !currentEntry.city
-    ) {
+    if (!currentEntry.title || !currentEntry.country || !currentEntry.city) {
       alert("Please fill in all required fields");
       return;
     }
@@ -286,6 +398,10 @@ const TravelLogApp = () => {
       kmWalked: 0,
       altitude: 0,
       healthNotes: "",
+      // Exercise & Training
+      exerciseType: "",
+      gymVisits: [],
+      trainingHours: 0,
       // Storytelling data
       socialEngagement: 0,
       favoriteMeal: "",
@@ -351,7 +467,12 @@ const TravelLogApp = () => {
     (total, entry) =>
       total +
       entry.expenses.reduce(
-        (entryTotal, expense) => entryTotal + (parseFloat(expense.amount) || 0),
+        (entryTotal, expense) =>
+          entryTotal +
+          convertToUSD(
+            parseFloat(expense.amount) || 0,
+            expense.currency || "USD"
+          ),
         0
       ),
     0
@@ -373,6 +494,77 @@ const TravelLogApp = () => {
     }));
   };
 
+  const addGymVisit = () => {
+    setCurrentEntry((prev) => ({
+      ...prev,
+      gymVisits: [
+        ...prev.gymVisits,
+        {
+          id: Date.now() + Math.random(),
+          name: "",
+          instagram: "",
+          type: "jiujitsu", // jiujitsu, mma, weightlifting
+          rating: 5,
+          notes: "",
+          cost: 0,
+        },
+      ],
+    }));
+  };
+
+  const updateGymVisit = (index, field, value) => {
+    setCurrentEntry((prev) => ({
+      ...prev,
+      gymVisits: prev.gymVisits.map((gym, i) =>
+        i === index ? { ...gym, [field]: value } : gym
+      ),
+    }));
+  };
+
+  const removeGymVisit = (index) => {
+    setCurrentEntry((prev) => ({
+      ...prev,
+      gymVisits: prev.gymVisits.filter((_, i) => i !== index),
+    }));
+  };
+
+  const getBudgetAnalytics = () => {
+    let totalCashSpent = 0;
+    let totalCardSpent = 0;
+
+    entries.forEach((entry) => {
+      totalCashSpent += convertToUSD(entry.paymentMethods?.cash || 0, 'USD');
+      totalCardSpent += convertToUSD(entry.paymentMethods?.card || 0, 'USD');
+    });
+
+    const remainingCash = budget.totalCashBudget - totalCashSpent;
+    const remainingCard = budget.totalCardBudget - totalCardSpent;
+    const totalBudget = budget.totalCashBudget + budget.totalCardBudget;
+    const totalSpent = totalCashSpent + totalCardSpent;
+    const totalRemaining = totalBudget - totalSpent;
+
+    return {
+      cash: {
+        budget: budget.totalCashBudget,
+        spent: totalCashSpent,
+        remaining: remainingCash,
+        percentUsed: budget.totalCashBudget > 0 ? (totalCashSpent / budget.totalCashBudget) * 100 : 0,
+      },
+      card: {
+        budget: budget.totalCardBudget,
+        spent: totalCardSpent,
+        remaining: remainingCard,
+        percentUsed: budget.totalCardBudget > 0 ? (totalCardSpent / budget.totalCardBudget) * 100 : 0,
+      },
+      total: {
+        budget: totalBudget,
+        spent: totalSpent,
+        remaining: totalRemaining,
+        percentUsed: totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0,
+      },
+    };
+  };
+
   // Enhanced data visualization calculations
   const getFinancialAnalytics = () => {
     const countrySpending = {};
@@ -386,25 +578,69 @@ const TravelLogApp = () => {
     const paymentMethodTotals = { cash: 0, card: 0 };
 
     entries.forEach((entry) => {
-      // Country spending
+      // Country spending (convert to USD)
       if (!countrySpending[entry.country]) {
         countrySpending[entry.country] = { usd: 0, local: 0, days: 0 };
       }
-      countrySpending[entry.country].usd += entry.dailySpend?.usd || 0;
-      countrySpending[entry.country].local += entry.dailySpend?.local || 0;
+      const dailyUSD = entry.dailySpend?.usd || 0;
+      const localToUSD = convertToUSD(
+        entry.dailySpend?.local || 0,
+        entry.dailySpend?.localCurrency || "USD"
+      );
+      countrySpending[entry.country].usd += dailyUSD + localToUSD;
       countrySpending[entry.country].days += entry.daysInCity || 1;
 
-      // Category spending
+      // Category spending (convert to USD)
       if (entry.expenseCategories) {
         Object.keys(categoryTotals).forEach((category) => {
-          categoryTotals[category] += entry.expenseCategories[category] || 0;
+          categoryTotals[category] += entry.expenseCategories[category] || 0; // Assuming these are already in USD
         });
       }
 
-      // Payment methods
+      // Payment methods (convert to USD)
       if (entry.paymentMethods) {
-        paymentMethodTotals.cash += entry.paymentMethods.cash || 0;
-        paymentMethodTotals.card += entry.paymentMethods.card || 0;
+        paymentMethodTotals.cash += entry.paymentMethods.cash || 0; // Assuming these are already in USD
+        paymentMethodTotals.card += entry.paymentMethods.card || 0; // Assuming these are already in USD
+      }
+
+      // Add expense items (convert to USD)
+      if (entry.expenses) {
+        entry.expenses.forEach((expense) => {
+          const expenseUSD = convertToUSD(
+            parseFloat(expense.amount) || 0,
+            expense.currency || "USD"
+          );
+          // Try to categorize the expense if not already in expense categories
+          const item = expense.item.toLowerCase();
+          if (
+            item.includes("transport") ||
+            item.includes("bus") ||
+            item.includes("taxi") ||
+            item.includes("flight")
+          ) {
+            categoryTotals.transport += expenseUSD;
+          } else if (
+            item.includes("hotel") ||
+            item.includes("hostel") ||
+            item.includes("accommodation")
+          ) {
+            categoryTotals.lodging += expenseUSD;
+          } else if (
+            item.includes("food") ||
+            item.includes("restaurant") ||
+            item.includes("meal")
+          ) {
+            categoryTotals.food += expenseUSD;
+          } else if (
+            item.includes("activity") ||
+            item.includes("tour") ||
+            item.includes("ticket")
+          ) {
+            categoryTotals.activities += expenseUSD;
+          } else {
+            categoryTotals.misc += expenseUSD;
+          }
+        });
       }
     });
 
@@ -531,11 +767,43 @@ const TravelLogApp = () => {
     let totalKmWalked = 0;
     let maxAltitude = 0;
     let minAltitude = Infinity;
+    let totalTrainingHours = 0;
     const altitudeChanges = [];
+    const exerciseTypes = { jiujitsu: 0, mma: 0, weightlifting: 0 };
+    const gymsByCountry = {};
+    const allGyms = [];
 
     entries.forEach((entry, index) => {
       totalSteps += entry.stepsPerDay || 0;
       totalKmWalked += entry.kmWalked || 0;
+      totalTrainingHours += entry.trainingHours || 0;
+
+      // Exercise type tracking
+      if (entry.exerciseType) {
+        exerciseTypes[entry.exerciseType] =
+          (exerciseTypes[entry.exerciseType] || 0) + 1;
+      }
+
+      // Gym visits tracking
+      if (entry.gymVisits && entry.gymVisits.length > 0) {
+        entry.gymVisits.forEach((gym) => {
+          if (!gymsByCountry[entry.country]) {
+            gymsByCountry[entry.country] = [];
+          }
+          gymsByCountry[entry.country].push({
+            ...gym,
+            country: entry.country,
+            city: entry.city,
+            date: entry.date,
+          });
+          allGyms.push({
+            ...gym,
+            country: entry.country,
+            city: entry.city,
+            date: entry.date,
+          });
+        });
+      }
 
       if (entry.altitude) {
         maxAltitude = Math.max(maxAltitude, entry.altitude);
@@ -552,6 +820,24 @@ const TravelLogApp = () => {
       }
     });
 
+    // Calculate training stats
+    const trainingDays = entries.filter(
+      (entry) =>
+        (entry.trainingHours && entry.trainingHours > 0) ||
+        (entry.gymVisits && entry.gymVisits.length > 0)
+    ).length;
+
+    const avgTrainingHoursPerDay =
+      trainingDays > 0 ? (totalTrainingHours / trainingDays).toFixed(1) : 0;
+    const gymVisitCount = allGyms.length;
+    const avgGymRating =
+      allGyms.length > 0
+        ? (
+            allGyms.reduce((sum, gym) => sum + (gym.rating || 0), 0) /
+            allGyms.length
+          ).toFixed(1)
+        : 0;
+
     return {
       totalSteps,
       totalKmWalked,
@@ -566,20 +852,50 @@ const TravelLogApp = () => {
       significantAltitudeChanges: altitudeChanges.filter(
         (change) => Math.abs(change.change) > 1000
       ),
+      // Training Analytics
+      totalTrainingHours,
+      trainingDays,
+      avgTrainingHoursPerDay,
+      exerciseTypeBreakdown: Object.entries(exerciseTypes)
+        .map(([type, count]) => ({
+          type: type.charAt(0).toUpperCase() + type.slice(1),
+          count,
+        }))
+        .filter((item) => item.count > 0),
+      gymAnalytics: {
+        totalGyms: gymVisitCount,
+        avgRating: avgGymRating,
+        gymsByCountry: Object.entries(gymsByCountry).map(([country, gyms]) => ({
+          country,
+          count: gyms.length,
+          avgRating:
+            gyms.length > 0
+              ? (
+                  gyms.reduce((sum, gym) => sum + (gym.rating || 0), 0) /
+                  gyms.length
+                ).toFixed(1)
+              : 0,
+        })),
+        topRatedGyms: allGyms
+          .filter((gym) => gym.rating >= 4)
+          .sort((a, b) => b.rating - a.rating)
+          .slice(0, 5),
+      },
     };
   };
 
   const getTimeAnalytics = () => {
     let totalDays = 0;
-    let totalTransitTime = 0;
-    let totalExplorationTime = 0;
+    let totalTransitHours = 0;
     const cityStays = {};
 
     entries.forEach((entry) => {
       const days = entry.daysInCity || 1;
       totalDays += days;
-      totalTransitTime += entry.transitTime || 0;
-      totalExplorationTime += entry.explorationTime || 0;
+
+      // Use transport duration (convert to days for comparison)
+      const transitHours = entry.transport?.duration || 0;
+      totalTransitHours += transitHours;
 
       if (!cityStays[entry.country]) {
         cityStays[entry.country] = { days: 0, cities: 0 };
@@ -588,26 +904,20 @@ const TravelLogApp = () => {
       cityStays[entry.country].cities += 1;
     });
 
+    // Convert transit hours to days for meaningful comparison
+    const totalTransitDays = totalTransitHours / 24;
+    const totalTime = totalDays + totalTransitDays;
+
     return {
       totalDays,
+      totalTransitHours,
       avgStayPerCity:
         entries.length > 0 ? (totalDays / entries.length).toFixed(1) : 0,
       transitVsExplorationRatio: {
         transit:
-          totalTransitTime + totalExplorationTime > 0
-            ? Math.round(
-                (totalTransitTime / (totalTransitTime + totalExplorationTime)) *
-                  100
-              )
-            : 0,
+          totalTime > 0 ? Math.round((totalTransitDays / totalTime) * 100) : 0,
         exploration:
-          totalTransitTime + totalExplorationTime > 0
-            ? Math.round(
-                (totalExplorationTime /
-                  (totalTransitTime + totalExplorationTime)) *
-                  100
-              )
-            : 0,
+          totalTime > 0 ? Math.round((totalDays / totalTime) * 100) : 0,
       },
       countryStays: Object.entries(cityStays).map(([country, data]) => ({
         country,
@@ -906,8 +1216,8 @@ const TravelLogApp = () => {
       <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
         {/* Header */}
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6 sm:mb-8">
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-3 sm:gap-4">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+            <div className="flex items-center gap-3 sm:gap-4 flex-1">
               <img
                 src="/poliworld-logo.png"
                 alt="PoliWorld Logo"
@@ -916,8 +1226,8 @@ const TravelLogApp = () => {
               <div className="min-w-0 flex-1">
                 <h1
                   className="text-2xl sm:text-3xl font-bold text-left        
-             bg-gradient-to-r from-purple-600 via-blue-600 
-             to-green-500 bg-clip-text text-transparent mb-1 sm:mb-2"
+               bg-gradient-to-r from-purple-600 via-blue-600 
+               to-green-500 bg-clip-text text-transparent mb-1 sm:mb-2"
                 >
                   PoliWorld
                 </h1>
@@ -937,7 +1247,7 @@ const TravelLogApp = () => {
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+            <div className="flex flex-wrap gap-2 justify-center lg:justify-end">
               <button
                 onClick={() => setShowForm(true)}
                 className="bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1 sm:gap-2 hover:bg-blue-700 transition-colors text-sm sm:text-base flex-1 sm:flex-none justify-center"
@@ -955,8 +1265,16 @@ const TravelLogApp = () => {
                 <span className="xs:hidden">Stats</span>
               </button>
               <button
-                onClick={() => setShowMap(true)}
+                onClick={() => setShowBudgetSettings(true)}
                 className="bg-green-600 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1 sm:gap-2 hover:bg-green-700 transition-colors text-sm sm:text-base flex-1 sm:flex-none justify-center"
+              >
+                <DollarSign size={16} className="sm:w-5 sm:h-5" />
+                <span className="hidden xs:inline">Budget</span>
+                <span className="xs:hidden">$</span>
+              </button>
+              <button
+                onClick={() => setShowMap(true)}
+                className="bg-orange-600 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1 sm:gap-2 hover:bg-orange-700 transition-colors text-sm sm:text-base flex-1 sm:flex-none justify-center"
               >
                 <MapPin size={16} className="sm:w-5 sm:h-5" />
                 <span className="hidden xs:inline">Map View</span>
@@ -964,7 +1282,7 @@ const TravelLogApp = () => {
               </button>
               <button
                 onClick={exportData}
-                className="bg-orange-600 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1 sm:gap-2 hover:bg-orange-700 transition-colors text-sm sm:text-base flex-1 sm:flex-none justify-center"
+                className="bg-pink-600 text-white px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1 sm:gap-2 hover:bg-pink-700 transition-colors text-sm sm:text-base flex-1 sm:flex-none justify-center"
               >
                 <Download size={16} className="sm:w-5 sm:h-5" />
                 <span className="hidden xs:inline">Export</span>
@@ -991,8 +1309,12 @@ const TravelLogApp = () => {
             <div className="flex items-center gap-2 sm:gap-3">
               <MapPin className="text-blue-600 flex-shrink-0" size={20} />
               <div className="min-w-0">
-                <p className="text-gray-600 text-xs sm:text-sm">Total Entries</p>
-                <p className="text-lg sm:text-2xl font-bold">{entries.length}</p>
+                <p className="text-gray-600 text-xs sm:text-sm">
+                  Total Entries
+                </p>
+                <p className="text-lg sm:text-2xl font-bold">
+                  {entries.length}
+                </p>
               </div>
             </div>
           </div>
@@ -1000,8 +1322,12 @@ const TravelLogApp = () => {
             <div className="flex items-center gap-2 sm:gap-3">
               <Calendar className="text-green-600 flex-shrink-0" size={20} />
               <div className="min-w-0">
-                <p className="text-gray-600 text-xs sm:text-sm">Countries Visited</p>
-                <p className="text-lg sm:text-2xl font-bold">{countries.length}</p>
+                <p className="text-gray-600 text-xs sm:text-sm">
+                  Countries Visited
+                </p>
+                <p className="text-lg sm:text-2xl font-bold">
+                  {countries.length}
+                </p>
               </div>
             </div>
           </div>
@@ -1022,10 +1348,14 @@ const TravelLogApp = () => {
               <div>
                 <p className="text-gray-600 text-sm">Total Distance</p>
                 <p className="text-2xl font-bold">
-                  {entries.reduce(
-                    (total, entry) => total + (entry.transport?.distance || 0),
-                    0
-                  ).toLocaleString()} km
+                  {entries
+                    .reduce(
+                      (total, entry) =>
+                        total + (entry.transport?.distance || 0),
+                      0
+                    )
+                    .toLocaleString()}{" "}
+                  km
                 </p>
               </div>
             </div>
@@ -1084,6 +1414,58 @@ const TravelLogApp = () => {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-h-96 overflow-y-auto">
+                {/* Budget Tracking */}
+                {(budget.totalCashBudget > 0 || budget.totalCardBudget > 0) && (
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-4 border border-green-200">
+                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                      💰
+                      Budget Tracking
+                    </h3>
+                    <div className="space-y-3">
+                      {/* Total Budget Progress */}
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span>Total Budget</span>
+                          <span className={getBudgetAnalytics().total.remaining >= 0 ? "text-green-600" : "text-red-600"}>
+                            ${getBudgetAnalytics().total.remaining.toFixed(0)} remaining
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-3">
+                          <div 
+                            className={`h-3 rounded-full ${getBudgetAnalytics().total.percentUsed > 100 ? 'bg-red-500' : getBudgetAnalytics().total.percentUsed > 80 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                            style={{ width: `${Math.min(getBudgetAnalytics().total.percentUsed, 100)}%` }}
+                          ></div>
+                        </div>
+                        <div className="text-xs text-gray-600 mt-1">
+                          ${getBudgetAnalytics().total.spent.toFixed(0)} of ${getBudgetAnalytics().total.budget.toFixed(0)} spent ({getBudgetAnalytics().total.percentUsed.toFixed(1)}%)
+                        </div>
+                      </div>
+
+                      {/* Cash vs Card Breakdown */}
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <div className="font-medium text-gray-700">💵 Cash</div>
+                          <div className="text-xs">
+                            ${getBudgetAnalytics().cash.spent.toFixed(0)} / ${getBudgetAnalytics().cash.budget.toFixed(0)}
+                          </div>
+                          <div className={`text-xs ${getBudgetAnalytics().cash.remaining >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            ${getBudgetAnalytics().cash.remaining.toFixed(0)} left
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-700">💳 Card</div>
+                          <div className="text-xs">
+                            ${getBudgetAnalytics().card.spent.toFixed(0)} / ${getBudgetAnalytics().card.budget.toFixed(0)}
+                          </div>
+                          <div className={`text-xs ${getBudgetAnalytics().card.remaining >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            ${getBudgetAnalytics().card.remaining.toFixed(0)} left
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Financial Analytics */}
                 <div className="bg-gray-50 rounded-lg p-4">
                   <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -1099,6 +1481,7 @@ const TravelLogApp = () => {
                         outerRadius={60}
                         fill="#8884d8"
                         dataKey="amount"
+                        nameKey="category"
                         label={false}
                       >
                         {getFinancialAnalytics().categoryBreakdown.map(
@@ -1110,7 +1493,12 @@ const TravelLogApp = () => {
                           )
                         )}
                       </Pie>
-                      <Tooltip formatter={(value) => [`${value}`, "Amount"]} />
+                      <Tooltip
+                        formatter={(value, name, props) => [
+                          `$${value}`,
+                          `${props.payload.category} Expenses`,
+                        ]}
+                      />
                       <Legend />
                     </RechartsPieChart>
                   </ResponsiveContainer>
@@ -1295,64 +1683,93 @@ const TravelLogApp = () => {
                   </div>
                 </div>
 
-                {/* Health & Fitness */}
+                {/* Health & Training */}
                 <div className="bg-gray-50 rounded-lg p-4">
                   <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <BarChart3 size={20} />
-                    Health & Fitness
+                    💪
+                    Health & Training
                   </h3>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  
+                  {/* Training Stats */}
+                  <div className="grid grid-cols-2 gap-4 text-sm mb-4">
                     <div>
-                      <span className="text-gray-600">Total Steps:</span>
+                      <span className="text-gray-600">Training Hours:</span>
                       <div className="font-semibold">
-                        {getHealthAnalytics().totalSteps.toLocaleString()}
+                        {getHealthAnalytics().totalTrainingHours}h
                       </div>
                     </div>
                     <div>
-                      <span className="text-gray-600">Total Km Walked:</span>
+                      <span className="text-gray-600">Training Days:</span>
                       <div className="font-semibold">
-                        {getHealthAnalytics().totalKmWalked} km
+                        {getHealthAnalytics().trainingDays}
                       </div>
                     </div>
                     <div>
-                      <span className="text-gray-600">Avg Steps/Day:</span>
+                      <span className="text-gray-600">Avg Hours/Day:</span>
                       <div className="font-semibold">
-                        {getHealthAnalytics().avgStepsPerDay.toLocaleString()}
+                        {getHealthAnalytics().avgTrainingHoursPerDay}h
                       </div>
                     </div>
                     <div>
-                      <span className="text-gray-600">Avg Km/Day:</span>
+                      <span className="text-gray-600">Gyms Visited:</span>
                       <div className="font-semibold">
-                        {getHealthAnalytics().avgKmPerDay} km
+                        {getHealthAnalytics().gymAnalytics.totalGyms}
                       </div>
                     </div>
                   </div>
-                  {getHealthAnalytics().altitudeRange.max > 0 && (
-                    <div className="mt-3 pt-3 border-t">
-                      <span className="text-gray-600 text-sm">
-                        Altitude Range:
-                      </span>
-                      <div className="font-semibold">
-                        {getHealthAnalytics().altitudeRange.min}m -{" "}
-                        {getHealthAnalytics().altitudeRange.max}m
+
+                  {/* Exercise Type Breakdown */}
+                  {getHealthAnalytics().exerciseTypeBreakdown.length > 0 && (
+                    <div className="mb-4 pb-4 border-b">
+                      <h4 className="font-medium text-gray-700 mb-2">Exercise Types</h4>
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        {getHealthAnalytics().exerciseTypeBreakdown.map((exercise) => (
+                          <div key={exercise.type} className="text-center">
+                            <div className="font-semibold">{exercise.count}</div>
+                            <div className="text-gray-600">{exercise.type}</div>
+                          </div>
+                        ))}
                       </div>
-                      {getHealthAnalytics().significantAltitudeChanges.length >
-                        0 && (
-                        <div className="mt-2">
-                          <span className="text-xs text-gray-600">
-                            Major Altitude Changes:
-                          </span>
-                          {getHealthAnalytics().significantAltitudeChanges.map(
-                            (change, index) => (
-                              <div key={index} className="text-xs">
-                                {change.from} → {change.to}:{" "}
-                                {change.change > 0 ? "+" : ""}
-                                {change.change}m
-                              </div>
-                            )
-                          )}
+                    </div>
+                  )}
+
+                  {/* Gym Analytics */}
+                  {getHealthAnalytics().gymAnalytics.totalGyms > 0 && (
+                    <div className="mb-4 pb-4 border-b">
+                      <h4 className="font-medium text-gray-700 mb-2">Gym Stats</h4>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="text-gray-600">Avg Rating:</span>
+                          <div className="font-semibold">
+                            ⭐ {getHealthAnalytics().gymAnalytics.avgRating}/5
+                          </div>
                         </div>
-                      )}
+                        <div>
+                          <span className="text-gray-600">Countries:</span>
+                          <div className="font-semibold">
+                            {getHealthAnalytics().gymAnalytics.gymsByCountry.length}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Top Rated Gyms */}
+                  {getHealthAnalytics().gymAnalytics.topRatedGyms.length > 0 && (
+                    <div>
+                      <h4 className="font-medium text-gray-700 mb-2">Top Gyms (4+ ⭐)</h4>
+                      <div className="space-y-1 max-h-24 overflow-y-auto">
+                        {getHealthAnalytics().gymAnalytics.topRatedGyms.slice(0, 3).map((gym, index) => (
+                          <div key={index} className="text-xs flex justify-between">
+                            <span className="truncate mr-2">
+                              {gym.name} - {gym.city}, {gym.country}
+                            </span>
+                            <span className="text-yellow-600 flex-shrink-0">
+                              {"⭐".repeat(gym.rating)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1995,6 +2412,192 @@ const TravelLogApp = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Health & Fitness / Training Data */}
+                <div className="border-t pt-4">
+                  <h3 className="text-lg font-semibold mb-4 text-gray-800">
+                    💪 Health & Training
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Exercise Type
+                      </label>
+                      <select
+                        value={currentEntry.exerciseType || ""}
+                        onChange={(e) =>
+                          handleInputChange("exerciseType", e.target.value)
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">None</option>
+                        <option value="jiujitsu">Jiu-Jitsu</option>
+                        <option value="mma">MMA</option>
+                        <option value="weightlifting">Weightlifting</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Training Hours
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={currentEntry.trainingHours || ""}
+                        onChange={(e) =>
+                          handleInputChange(
+                            "trainingHours",
+                            parseFloat(e.target.value) || 0
+                          )
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Gym Visits */}
+                  <div className="mb-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Gym Visits
+                      </label>
+                      <button
+                        type="button"
+                        onClick={addGymVisit}
+                        className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
+                      >
+                        Add Gym
+                      </button>
+                    </div>
+                    {currentEntry.gymVisits.map((gym, index) => (
+                      <div
+                        key={gym.id}
+                        className="mb-4 p-4 bg-gray-50 rounded-lg"
+                      >
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Gym Name
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="10th Planet"
+                              value={gym.name}
+                              onChange={(e) =>
+                                updateGymVisit(index, "name", e.target.value)
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Instagram
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="@10thplanetnetwork"
+                              value={gym.instagram}
+                              onChange={(e) =>
+                                updateGymVisit(
+                                  index,
+                                  "instagram",
+                                  e.target.value
+                                )
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Type
+                            </label>
+                            <select
+                              value={gym.type}
+                              onChange={(e) =>
+                                updateGymVisit(index, "type", e.target.value)
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="jiujitsu">Jiu-Jitsu</option>
+                              <option value="mma">MMA</option>
+                              <option value="weightlifting">
+                                Weightlifting
+                              </option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Rating
+                            </label>
+                            <select
+                              value={gym.rating}
+                              onChange={(e) =>
+                                updateGymVisit(
+                                  index,
+                                  "rating",
+                                  parseInt(e.target.value)
+                                )
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            >
+                              {[1, 2, 3, 4, 5].map((num) => (
+                                <option key={num} value={num}>
+                                  {"★".repeat(num)} ({num})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Drop-in Fee (USD)
+                            </label>
+                            <div className="flex gap-2">
+                              <input
+                                type="number"
+                                step="0.01"
+                                placeholder="e.g., 25.00"
+                                value={gym.cost}
+                                onChange={(e) =>
+                                  updateGymVisit(
+                                    index,
+                                    "cost",
+                                    parseFloat(e.target.value) || 0
+                                  )
+                                }
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeGymVisit(index)}
+                                className="text-red-600 hover:text-red-800 px-3 py-2 border border-red-300 rounded-lg hover:bg-red-50"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Notes
+                          </label>
+                          <textarea
+                            placeholder="Notes about instructors, class quality, facilities, etc."
+                            value={gym.notes}
+                            onChange={(e) =>
+                              updateGymVisit(index, "notes", e.target.value)
+                            }
+                            rows={2}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <div>
                   <div className="flex justify-between items-center mb-2">
                     <label className="block text-sm font-medium text-gray-700">
@@ -2103,125 +2706,270 @@ const TravelLogApp = () => {
             filteredEntries
               .sort((a, b) => new Date(b.date) - new Date(a.date))
               .map((entry, index) => (
-              <div key={entry.id} className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 sm:gap-3 mb-2">
-                      <span className="bg-blue-600 text-white rounded-full w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center text-xs sm:text-sm font-bold flex-shrink-0">
-                        {filteredEntries.length - index}
-                      </span>
-                      <h3 className="text-lg sm:text-xl font-bold text-gray-800 truncate">
-                        {entry.title}
-                      </h3>
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-gray-600 mb-2 text-sm sm:text-base">
-                      <span className="flex items-center gap-1">
-                        <MapPin size={14} />
-                        {entry.city}, {entry.country}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Calendar size={14} />
-                        {new Date(entry.date).toLocaleDateString()}
-                      </span>
-                      <span className="text-yellow-500">
-                        {"★".repeat(entry.rating)}
-                        {"☆".repeat(5 - entry.rating)}
-                      </span>
-                    </div>
-                    {entry.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        {entry.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs"
-                          >
-                            {tag}
+                <div
+                  key={entry.id}
+                  className="bg-white rounded-lg shadow-lg p-4 sm:p-6"
+                >
+                  <div className="flex flex-col xl:flex-row xl:justify-between mb-4 gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 sm:gap-3">
+                          <span className="bg-blue-600 text-white rounded-full w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center text-xs sm:text-sm font-bold flex-shrink-0">
+                            {filteredEntries.length - index}
                           </span>
+                          <h3 className="text-lg sm:text-xl font-bold text-gray-800">
+                            {entry.title}
+                          </h3>
+                        </div>
+                        <div className="flex gap-2 xl:hidden">
+                          <button
+                            onClick={() => editEntry(entry)}
+                            className="text-blue-600 hover:text-blue-800 p-2"
+                          >
+                            <Edit3 size={16} />
+                          </button>
+                          <button
+                            onClick={() => deleteEntry(entry.id)}
+                            className="text-red-600 hover:text-red-800 p-2"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex flex-col xl:flex-row xl:justify-between xl:items-start gap-2 xl:gap-4">
+                        <div className="flex-1">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-gray-600 mb-2 text-sm sm:text-base">
+                            <span className="flex items-center gap-1">
+                              <MapPin size={14} />
+                              {entry.city}, {entry.country}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Calendar size={14} />
+                              {new Date(entry.date).toLocaleDateString()}
+                            </span>
+                            <span className="text-yellow-500">
+                              {"★".repeat(entry.rating)}
+                              {"☆".repeat(5 - entry.rating)}
+                            </span>
+                          </div>
+                          {entry.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mb-2">
+                              {entry.tags.map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <p className="text-gray-700 text-left text-sm mb-3 xl:mb-0">
+                            {entry.description}
+                          </p>
+                        </div>
+
+                        {/* Photos Display - aligned with city/country/date/rating */}
+                        {entry.photos && entry.photos.length > 0 && (
+                          <div className="hidden xl:block xl:flex-shrink-0">
+                            <div className="flex gap-2">
+                              {entry.photos.slice(0, 3).map((photo) => (
+                                <div key={photo.id} className="relative group">
+                                  <img
+                                    src={photo.url}
+                                    alt={photo.name}
+                                    className="w-48 h-48 object-cover rounded border hover:opacity-75 transition-opacity cursor-pointer"
+                                    onClick={() =>
+                                      window.open(photo.url, "_blank")
+                                    }
+                                  />
+                                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all rounded flex items-center justify-center">
+                                    <Camera
+                                      className="text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                      size={20}
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="hidden xl:flex gap-2 ml-2 self-start">
+                      <button
+                        onClick={() => editEntry(entry)}
+                        className="text-blue-600 hover:text-blue-800 p-2"
+                      >
+                        <Edit3 size={16} />
+                      </button>
+                      <button
+                        onClick={() => deleteEntry(entry.id)}
+                        className="text-red-600 hover:text-red-800 p-2"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Mobile/Tablet Photos Display */}
+                  {entry.photos && entry.photos.length > 0 && (
+                    <div className="xl:hidden mb-4">
+                      <div className="flex gap-2 overflow-x-auto pb-2">
+                        {entry.photos.map((photo) => (
+                          <div
+                            key={photo.id}
+                            className="relative group flex-shrink-0"
+                          >
+                            <img
+                              src={photo.url}
+                              alt={photo.name}
+                              className="w-24 h-24 sm:w-32 sm:h-32 object-cover rounded border hover:opacity-75 transition-opacity cursor-pointer"
+                              onClick={() => window.open(photo.url, "_blank")}
+                            />
+                            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all rounded flex items-center justify-center">
+                              <Camera
+                                className="text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                size={16}
+                              />
+                            </div>
+                          </div>
                         ))}
                       </div>
-                    )}
+                    </div>
+                  )}
+
+                  {entry.expenses.length > 0 && (
+                    <div className="border-t pt-4">
+                      <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                        <DollarSign size={16} />
+                        Expenses
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {entry.expenses.map((expense, index) => (
+                          <div
+                            key={index}
+                            className="flex justify-between text-sm bg-gray-50 px-3 py-2 rounded"
+                          >
+                            <span>{expense.item}</span>
+                            <span className="font-medium">
+                              {expense.amount} {expense.currency}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="text-right mt-2 font-semibold text-gray-800">
+                        Total: $
+                        {entry.expenses
+                          .reduce(
+                            (sum, expense) =>
+                              sum +
+                              convertToUSD(
+                                parseFloat(expense.amount) || 0,
+                                expense.currency || "USD"
+                              ),
+                            0
+                          )
+                          .toFixed(2)}{" "}
+                        USD
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))
+          )}
+        </div>
+
+        {/* Budget Settings Modal */}
+        {showBudgetSettings && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold flex items-center gap-2">
+                  💰 Trip Budget
+                </h2>
+                <button
+                  onClick={() => setShowBudgetSettings(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Total Cash Budget (USD)
+                  </label>
+                  <input
+                    type="number"
+                    step="100"
+                    value={budget.totalCashBudget}
+                    onChange={(e) =>
+                      setBudget(prev => ({
+                        ...prev,
+                        totalCashBudget: parseFloat(e.target.value) || 0
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., 2000"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Cash you're carrying for the trip
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Total Card Budget (USD)
+                  </label>
+                  <input
+                    type="number"
+                    step="100"
+                    value={budget.totalCardBudget}
+                    onChange={(e) =>
+                      setBudget(prev => ({
+                        ...prev,
+                        totalCardBudget: parseFloat(e.target.value) || 0
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., 3000"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Available credit/debit card limit for the trip
+                  </p>
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="font-medium mb-2">Total Trip Budget</h3>
+                  <div className="text-2xl font-bold text-green-600">
+                    ${(budget.totalCashBudget + budget.totalCardBudget).toLocaleString()}
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => editEntry(entry)}
-                      className="text-blue-600 hover:text-blue-800 p-2"
-                    >
-                      <Edit3 size={16} />
-                    </button>
-                    <button
-                      onClick={() => deleteEntry(entry.id)}
-                      className="text-red-600 hover:text-red-800 p-2"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                  <div className="text-sm text-gray-600">
+                    ${budget.totalCashBudget.toLocaleString()} cash + ${budget.totalCardBudget.toLocaleString()} card
                   </div>
                 </div>
 
-                <p className="text-gray-700 mb-4 text-left">{entry.description}</p>
-
-                {/* Photos Display */}
-                {entry.photos && entry.photos.length > 0 && (
-                  <div className="mb-4">
-                    <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                      <Image size={16} />
-                      Photos ({entry.photos.length})
-                    </h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                      {entry.photos.map((photo) => (
-                        <div key={photo.id} className="relative group">
-                          <img
-                            src={photo.url}
-                            alt={photo.name}
-                            className="w-full h-20 object-cover rounded border hover:opacity-75 transition-opacity cursor-pointer"
-                            onClick={() => window.open(photo.url, "_blank")}
-                          />
-                          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all rounded flex items-center justify-center">
-                            <Camera
-                              className="text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                              size={16}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {entry.expenses.length > 0 && (
-                  <div className="border-t pt-4">
-                    <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                      <DollarSign size={16} />
-                      Expenses
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                      {entry.expenses.map((expense, index) => (
-                        <div
-                          key={index}
-                          className="flex justify-between text-sm bg-gray-50 px-3 py-2 rounded"
-                        >
-                          <span>{expense.item}</span>
-                          <span className="font-medium">
-                            {expense.amount} {expense.currency}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="text-right mt-2 font-semibold text-gray-800">
-                      Total: $
-                      {entry.expenses
-                        .reduce(
-                          (sum, expense) =>
-                            sum + (parseFloat(expense.amount) || 0),
-                          0
-                        )
-                        .toFixed(2)}
-                    </div>
-                  </div>
-                )}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowBudgetSettings(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => setShowBudgetSettings(false)}
+                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  >
+                    Save Budget
+                  </button>
+                </div>
               </div>
-            ))
-          )}
-        </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
