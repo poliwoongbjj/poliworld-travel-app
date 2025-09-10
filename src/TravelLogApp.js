@@ -1243,7 +1243,7 @@ const TravelLogApp = () => {
                     alt="Brazil flag"
                     className="inline"
                   />
-                  Brazil 🎒
+                  Brazil 🎒 Lucy 🧡
                 </p>
               </div>
             </div>
